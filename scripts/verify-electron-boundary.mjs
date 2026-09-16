@@ -1,0 +1,24 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+const preloadSource = readFileSync(resolve('electron', 'preload.cts'), 'utf8')
+const mainSource = readFileSync(resolve('electron', 'main.ts'), 'utf8')
+const channels = [...preloadSource.matchAll(/ipcRenderer\.invoke\('([^']+)'/g)].map((match) => match[1])
+
+if (!preloadSource.includes("contextBridge.exposeInMainWorld('adminAuth'")) {
+  throw new Error('The preload must expose the typed adminAuth bridge.')
+}
+if (preloadSource.includes("exposeInMainWorld('electron'") || preloadSource.includes("exposeInMainWorld('ipcRenderer'")) {
+  throw new Error('The preload must not expose raw Electron objects.')
+}
+if (JSON.stringify(channels) !== JSON.stringify(['admin-auth:login', 'admin-auth:restore', 'admin-auth:logout'])) {
+  throw new Error(`Unexpected exposed IPC channels: ${channels.join(', ')}`)
+}
+if (!mainSource.includes('contextIsolation: true') || !mainSource.includes('nodeIntegration: false')) {
+  throw new Error('Electron renderer security settings are not enabled.')
+}
+if (!mainSource.includes("preload: join(currentDirectory, 'preload.cjs')")) {
+  throw new Error('Electron must load the CommonJS-compatible preload output.')
+}
+
+console.log('Verified the narrow Electron authentication boundary.')
