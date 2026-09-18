@@ -142,6 +142,26 @@ export class AuthService {
     this.token = null
   }
 
+  async authenticatedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+    if (this.token === null) {
+      throw new AuthError('session-invalid', 'Your session is no longer valid. Please sign in again.')
+    }
+
+    const headers = new Headers(init.headers)
+    headers.set('Authorization', `Bearer ${this.token}`)
+    let response: Response
+    try {
+      response = await this.fetcher(`${this.backendUrl}${path}`, { ...init, headers })
+    } catch {
+      throw new AuthError('network', 'Unable to reach the Colorful Life service.')
+    }
+    if (response.status === 401) {
+      this.token = null
+      throw new AuthError('session-invalid', 'Your session is no longer valid. Please sign in again.')
+    }
+    return response
+  }
+
   private async fetchProfile(): Promise<AdminUser> {
     let profileResponse: Response
     try {

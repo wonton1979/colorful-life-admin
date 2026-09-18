@@ -3,11 +3,13 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { AuthError, AuthService } from './auth-service.js'
 import type { LoginCredentials } from './auth-contract.js'
+import { isCreateProductRequest, isImageUploadPayload, ProductError, ProductService } from './product-service.js'
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url))
 const rendererUrl = process.env.ELECTRON_RENDERER_URL
 const backendUrl = process.env.COLORFUL_LIFE_BACKEND_URL ?? 'http://localhost:3000'
 const authService = new AuthService(backendUrl, (input, init) => fetch(input, init))
+const productService = new ProductService(authService)
 
 const isLoginCredentials = (value: unknown): value is LoginCredentials =>
   typeof value === 'object' &&
@@ -26,6 +28,17 @@ ipcMain.handle('admin-auth:login', async (_event, credentials: unknown) => {
 
 ipcMain.handle('admin-auth:restore', () => authService.restore())
 ipcMain.handle('admin-auth:logout', () => authService.logout())
+
+ipcMain.handle('admin-products:create', async (_event, request: unknown) => {
+  if (!isCreateProductRequest(request)) throw new ProductError('validation', 'Invalid product details.')
+  return productService.createProduct(request)
+})
+
+ipcMain.handle('admin-products:upload-image', async (_event, listingId: unknown, image: unknown) => {
+  if (typeof listingId !== 'number' || !Number.isInteger(listingId) || listingId <= 0 || !isImageUploadPayload(image)) throw new ProductError('validation', 'Invalid product image.')
+  const validListingId = listingId
+  return productService.uploadListingImage(validListingId, image)
+})
 
 const createWindow = (): void => {
   const window = new BrowserWindow({
