@@ -11,7 +11,7 @@ if (!preloadSource.includes("contextBridge.exposeInMainWorld('adminAuth'")) {
 if (preloadSource.includes("exposeInMainWorld('electron'") || preloadSource.includes("exposeInMainWorld('ipcRenderer'")) {
   throw new Error('The preload must not expose raw Electron objects.')
 }
-if (JSON.stringify(channels) !== JSON.stringify(['admin-auth:login', 'admin-auth:restore', 'admin-auth:logout'])) {
+if (JSON.stringify(channels) !== JSON.stringify(['admin-auth:login', 'admin-auth:restore', 'admin-auth:logout', 'admin-products:create', 'admin-products:upload-image'])) {
   throw new Error(`Unexpected exposed IPC channels: ${channels.join(', ')}`)
 }
 if (!mainSource.includes('contextIsolation: true') || !mainSource.includes('nodeIntegration: false')) {
@@ -19,6 +19,13 @@ if (!mainSource.includes('contextIsolation: true') || !mainSource.includes('node
 }
 if (!mainSource.includes("preload: join(currentDirectory, 'preload.cjs')")) {
   throw new Error('Electron must load the CommonJS-compatible preload output.')
+}
+
+if (!preloadSource.includes("contextBridge.exposeInMainWorld('adminProducts'")) {
+  throw new Error('The preload must expose the typed adminProducts bridge.')
+}
+if (preloadSource.includes('readFile') || preloadSource.includes('readdir') || preloadSource.includes('writeFile')) {
+  throw new Error('The preload must not expose filesystem access.')
 }
 
 console.log('Verified the narrow Electron authentication boundary.')

@@ -13,6 +13,10 @@ describe('App authentication flow', () => {
       login: vi.fn().mockResolvedValue(admin),
       logout: vi.fn().mockResolvedValue(undefined),
     }
+    window.adminProducts = {
+      createProduct: vi.fn(),
+      uploadListingImage: vi.fn(),
+    }
   })
 
   it('shows the unauthenticated login screen and submits credentials', async () => {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import './App.css'
+import AddProduct from './AddProduct'
 
 type ViewState = 'restoring' | 'signed-out' | 'signed-in'
 
@@ -68,6 +69,7 @@ function App() {
           <span className="success-mark" aria-hidden="true">✓</span>
           <div><p className="eyebrow">ADMIN ACCESS CONFIRMED</p><h2>Welcome back</h2><p>{user.email}</p></div>
         </section>
+        <AddProduct />
       </main>
     )
   }
