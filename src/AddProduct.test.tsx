@@ -4,7 +4,7 @@ import type { ProductListing } from '../electron/product-contract'
 import AddProduct from './AddProduct'
 
 const product: ProductListing = {
-  id: 123, legoProductId: 456, colorfulLifeCategory: 'VEHICLES', condition: 'NEW', originalPrice: '29.99', salePrice: null, currentStock: 2,
+  id: 123, legoProductId: 456, colorfulLifeCategory: 'VEHICLES', catalogueArtworkUrl: null, catalogueArtworkPublicId: null, isFeatureProduct: false, condition: 'NEW', originalPrice: '29.99', salePrice: null, currentStock: 2,
   createdAt: '2026-01-01', updatedAt: '2026-01-01',
   legoProduct: { id: 456, setNumber: '60325', title: 'Example Set', description: null, theme: 'City', ageRecommendation: '6+', pieceCount: 235, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
   listingImages: [],
@@ -25,7 +25,7 @@ const imageFile = (name: string, type = 'image/jpeg', size = 4) => new File([new
 describe('AddProduct workflow', () => {
   beforeEach(() => {
     vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:test'), revokeObjectURL: vi.fn() })
-    window.adminProducts = { createProduct: vi.fn().mockResolvedValue(product), uploadListingImage: vi.fn().mockResolvedValue({ id: 1, listingId: 123, url: 'https://cdn.test/image.jpg', publicId: 'image', altText: null, sortOrder: 0, createdAt: '2026-01-01' }) }
+    window.adminProducts = { createProduct: vi.fn().mockResolvedValue(product), listProducts: vi.fn().mockResolvedValue([]), uploadListingImage: vi.fn().mockResolvedValue({ id: 1, listingId: 123, url: 'https://cdn.test/image.jpg', publicId: 'image', altText: null, sortOrder: 0, createdAt: '2026-01-01' }), setFeatureProduct: vi.fn(), uploadCatalogueArtwork: vi.fn(), removeCatalogueArtwork: vi.fn() }
   })
 
   afterEach(() => cleanup())
@@ -38,6 +38,16 @@ describe('AddProduct workflow', () => {
     expect(window.adminProducts.createProduct).toHaveBeenCalledOnce()
     expect(window.adminProducts.createProduct).toHaveBeenCalledWith(expect.objectContaining({ theme: 'City', colorfulLifeCategory: 'VEHICLES' }))
     expect(window.adminProducts.uploadListingImage).not.toHaveBeenCalled()
+  })
+
+  it('notifies the parent only after the product workflow is complete', async () => {
+    const onProductCreated = vi.fn()
+    render(<AddProduct onProductCreated={onProductCreated} />)
+    fillRequiredFields()
+    fireEvent.change(screen.getByLabelText('Product images'), { target: { files: [imageFile('cover.jpg')] } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Create product listing' }).closest('form') as HTMLFormElement)
+    await waitFor(() => expect(onProductCreated).toHaveBeenCalledWith(product))
+    expect(window.adminProducts.uploadListingImage).toHaveBeenCalledOnce()
   })
 
   it('renders every backend category option and requires an explicit independent selection', () => {

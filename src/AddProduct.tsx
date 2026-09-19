@@ -21,7 +21,11 @@ const maximumImages = 10
 
 const getErrorMessage = (error: unknown): string => error instanceof Error ? error.message : 'The product could not be created.'
 
-function AddProduct() {
+interface AddProductProps {
+  onProductCreated?: (product: ProductListing) => void
+}
+
+function AddProduct({ onProductCreated }: AddProductProps) {
   const [setNumber, setSetNumber] = useState('')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -38,10 +42,21 @@ function AddProduct() {
   const [isCreating, setIsCreating] = useState(false)
   const [isInitialUploadActive, setIsInitialUploadActive] = useState(false)
   const [createdProduct, setCreatedProduct] = useState<ProductListing | null>(null)
+  const creationNotifiedRef = useRef(false)
   const imagesRef = useRef(images)
   imagesRef.current = images
 
   useEffect(() => () => imagesRef.current.forEach((image) => URL.revokeObjectURL(image.previewUrl)), [])
+
+  const uploadedCount = images.filter((image) => image.status === 'uploaded').length
+  const isWorkflowActive = isCreating || isInitialUploadActive
+  const isWorkflowComplete = createdProduct !== null && !isWorkflowActive && images.every((image) => image.status === 'uploaded')
+
+  useEffect(() => {
+    if (!isWorkflowComplete || !createdProduct || creationNotifiedRef.current) return
+    creationNotifiedRef.current = true
+    onProductCreated?.(createdProduct)
+  }, [createdProduct, isWorkflowComplete, onProductCreated])
 
   const handleImageSelection = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? [])
@@ -139,12 +154,10 @@ function AddProduct() {
     setIsCreating(false)
     setIsInitialUploadActive(false)
     setCreatedProduct(null)
+    creationNotifiedRef.current = false
   }
 
-  const uploadedCount = images.filter((image) => image.status === 'uploaded').length
   const hasFailedImages = images.some((image) => image.status === 'failed' || image.status === 'pending')
-  const isWorkflowActive = isCreating || isInitialUploadActive
-  const isWorkflowComplete = createdProduct !== null && !isWorkflowActive && images.every((image) => image.status === 'uploaded')
   const canRetryImages = createdProduct !== null && !isWorkflowActive && hasFailedImages
 
   return (

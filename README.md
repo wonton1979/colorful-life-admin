@@ -4,6 +4,14 @@
 
 Run `npm run dev` to start Vite, compile Electron TypeScript in watch mode, wait for both resources, and open the Electron window.
 
+## Catalogue presentation management
+
+After signing in, the Presentation management panel loads active listings from `GET /products` and uses listing IDs for all presentation actions. The backend `isFeatureProduct` value is the only source of Feature/Standard state. `PATCH /products/:id/feature` is atomic and category-scoped; the Admin refreshes the catalogue after it succeeds. The backend does not expose a Feature-clear operation, so the Admin only offers selecting or changing a Feature listing.
+
+Catalogue artwork is separate from `listingImages`. The Admin sends artwork files through the backend with `PUT /products/:id/catalogue-artwork` and removes them with `DELETE /products/:id/catalogue-artwork`. It displays the backend-returned `catalogueArtworkUrl` directly and keeps `catalogueArtworkPublicId` as storage metadata. The backend enforces JPEG, PNG, or WebP files up to 8 MiB and owns the Cloudinary credentials and storage namespace.
+
+For local upload testing, run the backend with its Issue #92 database migration and Cloudinary configuration, then set `COLORFUL_LIFE_BACKEND_URL` for the Admin. No Cloudinary credentials are needed in this project.
+
 Run `npm run build` to build the renderer into `dist/` and compile the Electron main/preload files into `dist-electron/`. `npm run electron` then loads the built renderer from `dist/index.html`.
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

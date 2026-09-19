@@ -34,11 +34,27 @@ ipcMain.handle('admin-products:create', async (_event, request: unknown) => {
   return productService.createProduct(request)
 })
 
+ipcMain.handle('admin-products:list', () => productService.listProducts())
+
 ipcMain.handle('admin-products:upload-image', async (_event, listingId: unknown, image: unknown) => {
   if (typeof listingId !== 'number' || !Number.isInteger(listingId) || listingId <= 0 || !isImageUploadPayload(image)) throw new ProductError('validation', 'Invalid product image.')
   const validListingId = listingId
   return productService.uploadListingImage(validListingId, image)
 })
+
+const validateListingId = (listingId: unknown): number => {
+  if (typeof listingId !== 'number' || !Number.isInteger(listingId) || listingId <= 0) throw new ProductError('validation', 'Invalid product listing.')
+  return listingId
+}
+
+const validateCatalogueArtwork = (image: unknown) => {
+  if (!isImageUploadPayload(image)) throw new ProductError('validation', 'Invalid catalogue artwork.')
+  return image
+}
+
+ipcMain.handle('admin-products:set-feature', async (_event, listingId: unknown) => productService.setFeatureProduct(validateListingId(listingId)))
+ipcMain.handle('admin-products:upload-catalogue-artwork', async (_event, listingId: unknown, image: unknown) => productService.uploadCatalogueArtwork(validateListingId(listingId), validateCatalogueArtwork(image)))
+ipcMain.handle('admin-products:remove-catalogue-artwork', async (_event, listingId: unknown) => productService.removeCatalogueArtwork(validateListingId(listingId)))
 
 const createWindow = (): void => {
   const window = new BrowserWindow({

@@ -15,7 +15,11 @@ describe('App authentication flow', () => {
     }
     window.adminProducts = {
       createProduct: vi.fn(),
+      listProducts: vi.fn().mockResolvedValue([]),
       uploadListingImage: vi.fn(),
+      setFeatureProduct: vi.fn(),
+      uploadCatalogueArtwork: vi.fn(),
+      removeCatalogueArtwork: vi.fn(),
     }
   })
 
@@ -25,7 +29,8 @@ describe('App authentication flow', () => {
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: admin.email } })
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } })
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
-    await waitFor(() => expect(screen.getByText('ADMIN ACCESS CONFIRMED')).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Admin workspace' })).toBeInTheDocument())
+    expect(screen.getByText(admin.email)).toBeInTheDocument()
     expect(window.adminAuth.login).toHaveBeenCalledWith({ email: admin.email, password: 'secret' })
   })
 
@@ -80,9 +85,36 @@ describe('App authentication flow', () => {
   it('renders the restored shell and logs out', async () => {
     window.adminAuth.restore = vi.fn().mockResolvedValue(admin)
     render(<App />)
-    expect(await screen.findByText('ADMIN ACCESS CONFIRMED')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Admin workspace' })).toBeInTheDocument()
+    expect(screen.getByText(admin.email)).toBeInTheDocument()
+    expect(screen.queryByText('Welcome back')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: /sign in to continue/i })).toBeTruthy())
     expect(window.adminAuth.logout).toHaveBeenCalled()
+  })
+
+  it('places the workflows side-by-side structurally and refreshes Presentation management after creation', async () => {
+    const createdProduct = {
+      id: 321, legoProductId: 654, colorfulLifeCategory: 'CITY' as const, catalogueArtworkUrl: null, catalogueArtworkPublicId: null, isFeatureProduct: false,
+      condition: 'NEW' as const, originalPrice: '19.99', salePrice: null, currentStock: 1, createdAt: '2026-01-01', updatedAt: '2026-01-01',
+      legoProduct: { id: 654, setNumber: '60400', title: 'New City Set', description: null, theme: 'City', ageRecommendation: '6+', pieceCount: 200, createdAt: '2026-01-01', updatedAt: '2026-01-01' }, listingImages: [],
+    }
+    window.adminAuth.restore = vi.fn().mockResolvedValue(admin)
+    window.adminProducts.createProduct = vi.fn().mockResolvedValue(createdProduct)
+    window.adminProducts.listProducts = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([createdProduct])
+    const { container } = render(<App />)
+    expect(await screen.findByText('Presentation management')).toBeInTheDocument()
+    expect(container.querySelector('.catalogue-workspace')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Set number'), { target: { value: '60400' } })
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'New City Set' } })
+    fireEvent.change(screen.getByLabelText('Theme'), { target: { value: 'City' } })
+    fireEvent.change(screen.getByLabelText('Colorful Life Category'), { target: { value: 'CITY' } })
+    fireEvent.change(screen.getByLabelText('Age recommendation'), { target: { value: '6+' } })
+    fireEvent.change(screen.getByLabelText('Piece count'), { target: { value: '200' } })
+    fireEvent.change(screen.getByLabelText('Original price'), { target: { value: '19.99' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Create product listing' }).closest('form') as HTMLFormElement)
+    expect(await screen.findByText('New City Set')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Presentation category' })).toHaveValue('CITY')
+    expect(window.adminProducts.listProducts).toHaveBeenCalledTimes(2)
   })
 })
