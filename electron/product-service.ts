@@ -1,5 +1,5 @@
 import type { AuthService } from './auth-service.js'
-import type { ColorfulLifeCategory, CreateProductRequest, ImageUploadPayload, ListingImage, ProductListing } from './product-contract.js'
+import type { CatalogueArtwork, ColorfulLifeCategory, CreateProductRequest, ImageUploadPayload, ListingImage, ProductCataloguePage, ProductListing } from './product-contract.js'
 
 export type ProductErrorCode = 'validation' | 'conflict' | 'not-found' | 'limit' | 'forbidden' | 'server' | 'malformed-response'
 
@@ -29,11 +29,11 @@ const errorMessage = async (response: Response, fallback: string): Promise<strin
   return fallback
 }
 
-const errorForResponse = async (response: Response, operation: 'create' | 'upload'): Promise<ProductError> => {
+const errorForResponse = async (response: Response, operation: 'create' | 'upload' | 'catalogue' | 'feature' | 'list'): Promise<ProductError> => {
   const message = await errorMessage(response, 'The Colorful Life service could not complete this request.')
   if (response.status === 403) return new ProductError('forbidden', 'This account cannot manage products.', response.status)
-  if (response.status === 404) return new ProductError('not-found', operation === 'upload' ? 'The product listing could not be found.' : message, response.status)
-  if (response.status === 409) return new ProductError(response.status === 409 && operation === 'upload' ? 'limit' : 'conflict', message, response.status)
+  if (response.status === 404) return new ProductError('not-found', operation === 'upload' || operation === 'catalogue' || operation === 'feature' ? 'The product listing could not be found.' : message, response.status)
+  if (response.status === 409) return new ProductError(operation === 'upload' ? 'limit' : 'conflict', message, response.status)
   if (response.status === 400) return new ProductError('validation', message, response.status)
   if (response.status >= 500) return new ProductError('server', 'The Colorful Life service is unavailable right now.', response.status)
   return new ProductError('server', message, response.status)
@@ -47,7 +47,7 @@ const parseImage = (value: unknown): ListingImage => {
 }
 
 const parseProduct = (value: unknown): ProductListing => {
-  if (!isRecord(value) || !isNumber(value.id) || !isNumber(value.legoProductId) || !isString(value.colorfulLifeCategory) || !isString(value.condition) || !isString(value.originalPrice) || (!isString(value.salePrice) && value.salePrice !== null) || !isNumber(value.currentStock) || !isString(value.createdAt) || !isString(value.updatedAt) || !isRecord(value.legoProduct) || !Array.isArray(value.listingImages)) {
+  if (!isRecord(value) || !isNumber(value.id) || !isNumber(value.legoProductId) || !isString(value.colorfulLifeCategory) || (!isString(value.catalogueArtworkUrl) && value.catalogueArtworkUrl !== null) || (!isString(value.catalogueArtworkPublicId) && value.catalogueArtworkPublicId !== null) || typeof value.isFeatureProduct !== 'boolean' || !isString(value.condition) || !isString(value.originalPrice) || (!isString(value.salePrice) && value.salePrice !== null) || !isNumber(value.currentStock) || !isString(value.createdAt) || !isString(value.updatedAt) || !isRecord(value.legoProduct) || !Array.isArray(value.listingImages)) {
     throw new ProductError('malformed-response', 'The server returned an invalid product response.')
   }
   const legoProduct = value.legoProduct
@@ -55,16 +55,33 @@ const parseProduct = (value: unknown): ProductListing => {
     throw new ProductError('malformed-response', 'The server returned an invalid product response.')
   }
   return {
-    id: value.id, legoProductId: value.legoProductId, colorfulLifeCategory: value.colorfulLifeCategory as ColorfulLifeCategory, condition: value.condition, originalPrice: value.originalPrice, salePrice: value.salePrice,
+    id: value.id, legoProductId: value.legoProductId, colorfulLifeCategory: value.colorfulLifeCategory as ColorfulLifeCategory, catalogueArtworkUrl: value.catalogueArtworkUrl, catalogueArtworkPublicId: value.catalogueArtworkPublicId, isFeatureProduct: value.isFeatureProduct, condition: value.condition, originalPrice: value.originalPrice, salePrice: value.salePrice,
     currentStock: value.currentStock, createdAt: value.createdAt, updatedAt: value.updatedAt,
     legoProduct: { id: legoProduct.id, setNumber: legoProduct.setNumber, title: legoProduct.title, description: legoProduct.description, theme: legoProduct.theme, ageRecommendation: legoProduct.ageRecommendation, pieceCount: legoProduct.pieceCount, createdAt: legoProduct.createdAt, updatedAt: legoProduct.updatedAt },
     listingImages: value.listingImages.map(parseImage),
   }
 }
 
+const parseCataloguePage = (value: unknown): ProductCataloguePage => {
+  if (!isRecord(value) || !Array.isArray(value.items) || !isRecord(value.pagination) || !isNumber(value.pagination.page) || !isNumber(value.pagination.pageSize) || !isNumber(value.pagination.totalItems) || !isNumber(value.pagination.totalPages)) {
+    throw new ProductError('malformed-response', 'The server returned an invalid product catalogue response.')
+  }
+  return {
+    items: value.items.map(parseProduct),
+    pagination: { page: value.pagination.page, pageSize: value.pagination.pageSize, totalItems: value.pagination.totalItems, totalPages: value.pagination.totalPages },
+  }
+}
+
 const parseUploadResponse = (value: unknown): ListingImage => {
   if (!isRecord(value) || !('image' in value)) throw new ProductError('malformed-response', 'The server returned an invalid image response.')
   return parseImage(value.image)
+}
+
+const parseCatalogueArtworkResponse = (value: unknown): CatalogueArtwork => {
+  if (!isRecord(value) || !isRecord(value.catalogueArtwork) || !isString(value.catalogueArtwork.url) || !isString(value.catalogueArtwork.publicId)) {
+    throw new ProductError('malformed-response', 'The server returned an invalid catalogue artwork response.')
+  }
+  return { url: value.catalogueArtwork.url, publicId: value.catalogueArtwork.publicId }
 }
 
 export class ProductService {
@@ -80,6 +97,19 @@ export class ProductService {
     return parseProduct(await response.json())
   }
 
+  async listProducts(): Promise<ProductListing[]> {
+    const first = await this.authService.authenticatedFetch('/products?page=1&pageSize=100')
+    if (!first.ok) throw await errorForResponse(first, 'list')
+    const firstPage = parseCataloguePage(await first.json())
+    if (firstPage.pagination.totalPages <= 1) return firstPage.items
+    const pages = await Promise.all(Array.from({ length: firstPage.pagination.totalPages - 1 }, (_, index) => index + 2).map(async (page) => {
+      const response = await this.authService.authenticatedFetch(`/products?page=${page}&pageSize=100`)
+      if (!response.ok) throw await errorForResponse(response, 'list')
+      return parseCataloguePage(await response.json())
+    }))
+    return [firstPage, ...pages].flatMap((page) => page.items)
+  }
+
   async uploadListingImage(listingId: number, image: ImageUploadPayload): Promise<ListingImage> {
     const form = new FormData()
     form.append('file', new Blob([image.bytes.buffer as ArrayBuffer], { type: image.mimeType }), image.filename)
@@ -87,6 +117,27 @@ export class ProductService {
     const response = await this.authService.authenticatedFetch(`/products/${listingId}/images`, { method: 'POST', body: form })
     if (!response.ok) throw await errorForResponse(response, 'upload')
     return parseUploadResponse(await response.json())
+  }
+
+  async setFeatureProduct(listingId: number): Promise<{ id: number; colorfulLifeCategory: ColorfulLifeCategory; isFeatureProduct: boolean }> {
+    const response = await this.authService.authenticatedFetch(`/products/${listingId}/feature`, { method: 'PATCH' })
+    if (!response.ok) throw await errorForResponse(response, 'feature')
+    const value: unknown = await response.json()
+    if (!isRecord(value) || !isNumber(value.id) || !isString(value.colorfulLifeCategory) || typeof value.isFeatureProduct !== 'boolean') throw new ProductError('malformed-response', 'The server returned an invalid feature product response.')
+    return { id: value.id, colorfulLifeCategory: value.colorfulLifeCategory as ColorfulLifeCategory, isFeatureProduct: value.isFeatureProduct }
+  }
+
+  async uploadCatalogueArtwork(listingId: number, image: ImageUploadPayload): Promise<CatalogueArtwork> {
+    const form = new FormData()
+    form.append('file', new Blob([image.bytes.buffer as ArrayBuffer], { type: image.mimeType }), image.filename)
+    const response = await this.authService.authenticatedFetch(`/products/${listingId}/catalogue-artwork`, { method: 'PUT', body: form })
+    if (!response.ok) throw await errorForResponse(response, 'catalogue')
+    return parseCatalogueArtworkResponse(await response.json())
+  }
+
+  async removeCatalogueArtwork(listingId: number): Promise<void> {
+    const response = await this.authService.authenticatedFetch(`/products/${listingId}/catalogue-artwork`, { method: 'DELETE' })
+    if (!response.ok) throw await errorForResponse(response, 'catalogue')
   }
 }
 

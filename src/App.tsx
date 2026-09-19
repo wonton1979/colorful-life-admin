@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import './App.css'
 import AddProduct from './AddProduct'
+import CataloguePresentation from './CataloguePresentation'
+import type { ColorfulLifeCategory, ProductListing } from '../electron/product-contract'
 
 type ViewState = 'restoring' | 'signed-out' | 'signed-in'
 
@@ -13,6 +15,8 @@ function App() {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [presentationRefreshToken, setPresentationRefreshToken] = useState(0)
+  const [presentationRefreshCategory, setPresentationRefreshCategory] = useState<ColorfulLifeCategory | null>(null)
 
   useEffect(() => {
     if (!window.adminAuth) return
@@ -54,6 +58,11 @@ function App() {
     setError('')
   }
 
+  const handleProductCreated = (product: ProductListing) => {
+    setPresentationRefreshCategory(product.colorfulLifeCategory)
+    setPresentationRefreshToken((current) => current + 1)
+  }
+
   if (viewState === 'restoring') {
     return <main className="auth-page"><p className="status-message">Restoring session…</p></main>
   }
@@ -62,14 +71,13 @@ function App() {
     return (
       <main className="shell">
         <header className="shell-header">
-          <div><p className="eyebrow">COLORFUL LIFE</p><h1>Admin workspace</h1></div>
+          <div><p className="eyebrow">COLORFUL LIFE</p><div className="workspace-title"><h1>Admin workspace</h1><span className="admin-status" aria-label="Administrator access confirmed">✓</span><span className="admin-email">{user.email}</span></div></div>
           <button className="button button-secondary" type="button" onClick={() => void handleLogout()}>Sign out</button>
         </header>
-        <section className="welcome-card" aria-live="polite">
-          <span className="success-mark" aria-hidden="true">✓</span>
-          <div><p className="eyebrow">ADMIN ACCESS CONFIRMED</p><h2>Welcome back</h2><p>{user.email}</p></div>
-        </section>
-        <AddProduct />
+        <div className="catalogue-workspace">
+          <AddProduct onProductCreated={handleProductCreated} />
+          <CataloguePresentation refreshToken={presentationRefreshToken} refreshCategory={presentationRefreshCategory} />
+        </div>
       </main>
     )
   }

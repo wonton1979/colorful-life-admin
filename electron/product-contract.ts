@@ -46,6 +46,9 @@ export interface ProductListing {
   id: number
   legoProductId: number
   colorfulLifeCategory: ColorfulLifeCategory
+  catalogueArtworkUrl: string | null
+  catalogueArtworkPublicId: string | null
+  isFeatureProduct: boolean
   condition: ListingCondition
   originalPrice: string
   salePrice: string | null
@@ -63,7 +66,26 @@ export interface ImageUploadPayload {
   altText?: string
 }
 
+export interface CatalogueArtwork {
+  url: string
+  publicId: string
+}
+
+export interface ProductCataloguePage {
+  items: ProductListing[]
+  pagination: {
+    page: number
+    pageSize: number
+    totalItems: number
+    totalPages: number
+  }
+}
+
 export interface AdminProductsApi {
   createProduct(request: CreateProductRequest): Promise<ProductListing>
+  listProducts(): Promise<ProductListing[]>
   uploadListingImage(listingId: number, image: ImageUploadPayload): Promise<ListingImage>
+  setFeatureProduct(listingId: number): Promise<{ id: number; colorfulLifeCategory: ColorfulLifeCategory; isFeatureProduct: boolean }>
+  uploadCatalogueArtwork(listingId: number, image: ImageUploadPayload): Promise<CatalogueArtwork>
+  removeCatalogueArtwork(listingId: number): Promise<void>
 }
