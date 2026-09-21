@@ -4,7 +4,7 @@ import type { ProductListing } from '../electron/product-contract'
 import AddProduct from './AddProduct'
 
 const product: ProductListing = {
-  id: 123, legoProductId: 456, colorfulLifeCategory: 'VEHICLES', catalogueArtworkUrl: null, catalogueArtworkPublicId: null, isFeatureProduct: false, condition: 'NEW', originalPrice: '29.99', salePrice: null, currentStock: 2,
+  id: 123, legoProductId: 456, colorfulLifeCategory: 'VEHICLES', category: { id: 11, name: 'Vehicles', subtitle: 'Built for the thrill', description: null, imageUrl: null }, catalogueArtworkUrl: null, catalogueArtworkPublicId: null, isFeatureProduct: false, condition: 'NEW', originalPrice: '29.99', salePrice: null, currentStock: 2, availableStock: 2,
   createdAt: '2026-01-01', updatedAt: '2026-01-01',
   legoProduct: { id: 456, setNumber: '60325', title: 'Example Set', description: null, theme: 'City', ageRecommendation: '6+', pieceCount: 235, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
   listingImages: [],

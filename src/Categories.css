@@ -1,0 +1,17 @@
+.categories-panel { max-width: none; margin-top: 36px; }
+.category-list { display: grid; gap: 14px; }
+.category-card { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 20px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+.category-preview { display: grid; place-items: center; min-height: 150px; border-radius: 8px; color: var(--text-muted); background: #f4f1ea; font-size: 12px; text-align: center; }
+.category-preview img { width: 100%; height: 150px; object-fit: contain; border-radius: 8px; }
+.category-details { min-width: 0; }
+.category-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.category-heading h3 { margin: 0; color: #26342f; font-size: 18px; }
+.category-heading p, .category-description { margin: 6px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.category-description { max-width: 760px; }
+.category-id { color: var(--text-muted); font-size: 12px; }
+.category-edit-form { display: grid; gap: 10px; }
+.category-edit-form label { display: grid; gap: 6px; margin: 0; }
+.category-edit-form textarea { min-height: 90px; padding: 10px 13px; resize: vertical; border: 1px solid var(--border); border-radius: 9px; font: inherit; }
+.category-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.category-actions .button { display: flex; align-items: center; justify-content: center; flex: 0 0 140px; box-sizing: border-box; width: 140px; min-width: 140px; height: 38px; min-height: 38px; margin: 0; padding: 0 12px; font-size: 12px; line-height: 1; text-align: center; vertical-align: top; }
+@media (max-width: 620px) { .category-card { grid-template-columns: 1fr; } .category-preview, .category-preview img { height: 180px; } }

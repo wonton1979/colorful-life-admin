@@ -1,5 +1,6 @@
 import type { AuthService } from './auth-service.js'
-import type { CatalogueArtwork, ColorfulLifeCategory, CreateProductRequest, ImageUploadPayload, ListingImage, ProductCataloguePage, ProductListing } from './product-contract.js'
+import { colorfulLifeCategoryOptions } from './product-contract.js'
+import type { BackendCategory, CatalogueArtwork, ColorfulLifeCategory, CreateProductRequest, ImageUploadPayload, ListingImage, ProductCataloguePage, ProductListing } from './product-contract.js'
 
 export type ProductErrorCode = 'validation' | 'conflict' | 'not-found' | 'limit' | 'forbidden' | 'server' | 'malformed-response'
 
@@ -18,6 +19,21 @@ export class ProductError extends Error {
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 const isString = (value: unknown): value is string => typeof value === 'string'
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
+const isNullableString = (value: unknown): value is string | null => isString(value) || value === null
+
+const parseCategory = (value: unknown): BackendCategory | null => {
+  if (value === null) return null
+  if (!isRecord(value) || !isNumber(value.id) || !isString(value.name) || !isNullableString(value.subtitle) || !isNullableString(value.description) || !isNullableString(value.imageUrl)) {
+    throw new ProductError('malformed-response', 'The server returned an invalid product category response.')
+  }
+  return { id: value.id, name: value.name, subtitle: value.subtitle, description: value.description, imageUrl: value.imageUrl }
+}
+
+const categoryEnum = (category: BackendCategory | null): ColorfulLifeCategory | null => {
+  if (!category) return null
+  const normalizedName = category.name.replace(/[^a-z0-9]/gi, '').toLowerCase()
+  return colorfulLifeCategoryOptions.find(([, label]) => label.replace(/[^a-z0-9]/gi, '').toLowerCase() === normalizedName)?.[0] ?? null
+}
 
 const errorMessage = async (response: Response, fallback: string): Promise<string> => {
   try {
@@ -47,16 +63,18 @@ const parseImage = (value: unknown): ListingImage => {
 }
 
 const parseProduct = (value: unknown): ProductListing => {
-  if (!isRecord(value) || !isNumber(value.id) || !isNumber(value.legoProductId) || !isString(value.colorfulLifeCategory) || (!isString(value.catalogueArtworkUrl) && value.catalogueArtworkUrl !== null) || (!isString(value.catalogueArtworkPublicId) && value.catalogueArtworkPublicId !== null) || typeof value.isFeatureProduct !== 'boolean' || !isString(value.condition) || !isString(value.originalPrice) || (!isString(value.salePrice) && value.salePrice !== null) || !isNumber(value.currentStock) || !isString(value.createdAt) || !isString(value.updatedAt) || !isRecord(value.legoProduct) || !Array.isArray(value.listingImages)) {
+  if (!isRecord(value) || !isNumber(value.id) || !isNumber(value.legoProductId) || (!isString(value.catalogueArtworkUrl) && value.catalogueArtworkUrl !== null) || (!isString(value.catalogueArtworkPublicId) && value.catalogueArtworkPublicId !== null) || typeof value.isFeatureProduct !== 'boolean' || !isString(value.condition) || !isString(value.originalPrice) || (!isString(value.salePrice) && value.salePrice !== null) || !isNumber(value.currentStock) || (!isNumber(value.availableStock) && value.availableStock !== undefined) || !isString(value.createdAt) || !isString(value.updatedAt) || !isRecord(value.legoProduct) || !Array.isArray(value.listingImages)) {
     throw new ProductError('malformed-response', 'The server returned an invalid product response.')
   }
+  const category = parseCategory(value.category)
+  const availableStock = value.availableStock === undefined ? value.currentStock : value.availableStock
   const legoProduct = value.legoProduct
-  if (!isNumber(legoProduct.id) || !isString(legoProduct.setNumber) || !isString(legoProduct.title) || (!isString(legoProduct.description) && legoProduct.description !== null) || !isString(legoProduct.theme) || !isString(legoProduct.ageRecommendation) || !isNumber(legoProduct.pieceCount) || !isString(legoProduct.createdAt) || !isString(legoProduct.updatedAt) || (value.condition !== 'NEW' && value.condition !== 'USED_LIKE_NEW') || !['HARRY_POTTER', 'STAR_WARS', 'FRIENDS', 'CITY', 'DISNEY', 'MARVEL', 'JURASSIC_WORLD', 'FLOWERS_AND_BOTANICALS', 'NINJAGO', 'HEROES', 'VEHICLES', 'CREATOR', 'OTHERS'].includes(value.colorfulLifeCategory)) {
+  if (!isNumber(legoProduct.id) || !isString(legoProduct.setNumber) || !isString(legoProduct.title) || (!isString(legoProduct.description) && legoProduct.description !== null) || !isString(legoProduct.theme) || !isString(legoProduct.ageRecommendation) || !isNumber(legoProduct.pieceCount) || !isString(legoProduct.createdAt) || !isString(legoProduct.updatedAt) || (value.condition !== 'NEW' && value.condition !== 'USED_LIKE_NEW')) {
     throw new ProductError('malformed-response', 'The server returned an invalid product response.')
   }
   return {
-    id: value.id, legoProductId: value.legoProductId, colorfulLifeCategory: value.colorfulLifeCategory as ColorfulLifeCategory, catalogueArtworkUrl: value.catalogueArtworkUrl, catalogueArtworkPublicId: value.catalogueArtworkPublicId, isFeatureProduct: value.isFeatureProduct, condition: value.condition, originalPrice: value.originalPrice, salePrice: value.salePrice,
-    currentStock: value.currentStock, createdAt: value.createdAt, updatedAt: value.updatedAt,
+    id: value.id, legoProductId: value.legoProductId, colorfulLifeCategory: categoryEnum(category) ?? 'OTHERS', category, catalogueArtworkUrl: value.catalogueArtworkUrl, catalogueArtworkPublicId: value.catalogueArtworkPublicId, isFeatureProduct: value.isFeatureProduct, condition: value.condition, originalPrice: value.originalPrice, salePrice: value.salePrice,
+    currentStock: value.currentStock, availableStock, createdAt: value.createdAt, updatedAt: value.updatedAt,
     legoProduct: { id: legoProduct.id, setNumber: legoProduct.setNumber, title: legoProduct.title, description: legoProduct.description, theme: legoProduct.theme, ageRecommendation: legoProduct.ageRecommendation, pieceCount: legoProduct.pieceCount, createdAt: legoProduct.createdAt, updatedAt: legoProduct.updatedAt },
     listingImages: value.listingImages.map(parseImage),
   }

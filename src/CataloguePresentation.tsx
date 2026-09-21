@@ -18,6 +18,7 @@ function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: Cat
   const [listings, setListings] = useState<ProductListing[]>([])
   const [selectedCategory, setSelectedCategory] = useState<ColorfulLifeCategory | ''>('')
   const [isLoading, setIsLoading] = useState(true)
+  const [hasLoaded, setHasLoaded] = useState(false)
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
   const [activeAction, setActiveAction] = useState<string | null>(null)
@@ -25,10 +26,12 @@ function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: Cat
 
   const loadListings = async ({ category = selectedCategory, resetPage = false }: { category?: ColorfulLifeCategory | ''; resetPage?: boolean } = {}) => {
     setIsLoading(true)
+    setHasLoaded(false)
     setError('')
     try {
       const nextListings = await window.adminProducts.listProducts()
       setListings(nextListings)
+      setHasLoaded(true)
       if (resetPage) {
         setPage(1)
       } else {
@@ -129,7 +132,7 @@ function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: Cat
       {error && <p className="error-message" role="alert">{error}</p>}
       {feedback && <p className="success-message" role="status">{feedback}</p>}
       {isLoading && <p className="status-message">Loading catalogue listings…</p>}
-      {!isLoading && visibleListings.length === 0 && <p className="status-message">No listings found for this category.</p>}
+      {!isLoading && hasLoaded && visibleListings.length === 0 && <p className="status-message">No listings found for this category.</p>}
       {!isLoading && visibleListings.length > 0 && <>
         <div className="presentation-list" aria-label="Catalogue presentation listings">{paginatedListings.map((listing) => {
         const featureAction = activeAction === `feature-${listing.id}`
