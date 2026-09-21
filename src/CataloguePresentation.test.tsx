@@ -3,9 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProductListing } from '../electron/product-contract'
 import CataloguePresentation from './CataloguePresentation'
 
+const categories = [{ id: 11, name: 'Vehicles', subtitle: 'Built for the thrill', description: null, imageUrl: null }, { id: 4, name: 'City', subtitle: 'Every street tells a story', description: null, imageUrl: null }]
 const makeListing = (id: number, isFeatureProduct = false, catalogueArtworkUrl: string | null = null, colorfulLifeCategory: 'VEHICLES' | 'CITY' = 'VEHICLES'): ProductListing => ({
-  id, legoProductId: id + 100, colorfulLifeCategory, catalogueArtworkUrl, catalogueArtworkPublicId: catalogueArtworkUrl ? `stored-${id}` : null, isFeatureProduct,
-  condition: 'NEW', originalPrice: '29.99', salePrice: null, currentStock: 2, createdAt: '2026-01-01', updatedAt: '2026-01-01',
+  id, legoProductId: id + 100, colorfulLifeCategory, category: colorfulLifeCategory === 'CITY' ? categories[1] : categories[0], catalogueArtworkUrl, catalogueArtworkPublicId: catalogueArtworkUrl ? `stored-${id}` : null, isFeatureProduct,
+  condition: 'NEW', originalPrice: '29.99', salePrice: null, currentStock: 2, availableStock: 2, createdAt: '2026-01-01', updatedAt: '2026-01-01',
   legoProduct: { id: id + 100, setNumber: `SET-${id}`, title: `Vehicle ${id}`, description: null, theme: 'City', ageRecommendation: '6+', pieceCount: 100, createdAt: '2026-01-01', updatedAt: '2026-01-01' }, listingImages: [],
 })
 
@@ -18,6 +19,7 @@ describe('CataloguePresentation', () => {
       uploadCatalogueArtwork: vi.fn().mockResolvedValue({ url: 'https://cdn.example/new-artwork.jpg', publicId: 'stored-1' }), removeCatalogueArtwork: vi.fn().mockResolvedValue(undefined),
       listProducts: vi.fn().mockResolvedValue([makeListing(1, true, 'https://cdn.example/current.jpg'), makeListing(2)]),
     }
+    window.adminCategories = { list: vi.fn().mockResolvedValue(categories), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn() }
   })
 
   it('renders Feature and Standard state, category, and only catalogue artwork preview', async () => {
@@ -132,5 +134,20 @@ describe('CataloguePresentation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refresh listings' }))
     await waitFor(() => expect(screen.getByText('Vehicle 1')).toBeInTheDocument())
     expect(screen.queryByText('Page 2 of 2')).not.toBeInTheDocument()
+  })
+
+  it('shows a genuine empty result only after a successful empty response', async () => {
+    const listProducts = window.adminProducts.listProducts as ReturnType<typeof vi.fn>
+    listProducts.mockResolvedValue([])
+    render(<CataloguePresentation />)
+    expect(await screen.findByText('No listings found for this category.')).toBeInTheDocument()
+  })
+
+  it('shows a load error without presenting it as an empty result', async () => {
+    const listProducts = window.adminProducts.listProducts as ReturnType<typeof vi.fn>
+    listProducts.mockRejectedValue(new Error('The catalogue service is unavailable.'))
+    render(<CataloguePresentation />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('The catalogue service is unavailable.')
+    expect(screen.queryByText('No listings found for this category.')).not.toBeInTheDocument()
   })
 })

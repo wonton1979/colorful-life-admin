@@ -95,8 +95,8 @@ describe('App authentication flow', () => {
 
   it('places the workflows side-by-side structurally and refreshes Presentation management after creation', async () => {
     const createdProduct = {
-      id: 321, legoProductId: 654, colorfulLifeCategory: 'CITY' as const, catalogueArtworkUrl: null, catalogueArtworkPublicId: null, isFeatureProduct: false,
-      condition: 'NEW' as const, originalPrice: '19.99', salePrice: null, currentStock: 1, createdAt: '2026-01-01', updatedAt: '2026-01-01',
+      id: 321, legoProductId: 654, colorfulLifeCategory: 'CITY' as const, category: { id: 4, name: 'City', subtitle: 'Every street tells a story', description: null, imageUrl: null }, catalogueArtworkUrl: null, catalogueArtworkPublicId: null, isFeatureProduct: false,
+      condition: 'NEW' as const, originalPrice: '19.99', salePrice: null, currentStock: 1, availableStock: 1, createdAt: '2026-01-01', updatedAt: '2026-01-01',
       legoProduct: { id: 654, setNumber: '60400', title: 'New City Set', description: null, theme: 'City', ageRecommendation: '6+', pieceCount: 200, createdAt: '2026-01-01', updatedAt: '2026-01-01' }, listingImages: [],
     }
     window.adminAuth.restore = vi.fn().mockResolvedValue(admin)

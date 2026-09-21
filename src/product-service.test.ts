@@ -3,7 +3,7 @@ import type { AuthService } from '../electron/auth-service.js'
 import { ProductError, ProductService } from '../electron/product-service.js'
 
 const productBody = {
-  id: 123, legoProductId: 456, colorfulLifeCategory: 'VEHICLES', catalogueArtworkUrl: null, catalogueArtworkPublicId: null, isFeatureProduct: false, condition: 'NEW', originalPrice: '29.99', salePrice: null, currentStock: 2,
+  id: 123, legoProductId: 456, colorfulLifeCategory: 'VEHICLES', category: { id: 11, name: 'Vehicles', subtitle: 'Built for the thrill', description: null, imageUrl: null }, catalogueArtworkUrl: null, catalogueArtworkPublicId: null, isFeatureProduct: false, condition: 'NEW', originalPrice: '29.99', salePrice: null, currentStock: 2, availableStock: 2,
   createdAt: '2026-01-01', updatedAt: '2026-01-01',
   legoProduct: { id: 456, setNumber: '60325', title: 'Example Set', description: null, theme: 'City', ageRecommendation: '6+', pieceCount: 235, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
   listingImages: [],
@@ -50,6 +50,14 @@ describe('ProductService', () => {
     expect(result.map((listing) => listing.id)).toEqual([123, 124])
     expect(result[1].catalogueArtworkUrl).toBe('https://cdn.example/artwork.jpg')
     expect(authenticatedFetch.mock.calls.map((call) => call[0])).toEqual(['/products?page=1&pageSize=100', '/products?page=2&pageSize=100'])
+  })
+
+  it('parses the current category-based catalogue response contract', async () => {
+    const currentBackendProduct = { ...productBody, colorfulLifeCategory: undefined, category: { id: 1, name: 'Harry Potter', subtitle: 'Magic in every build', description: null, imageUrl: null }, availableStock: 1 }
+    const authenticatedFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [currentBackendProduct], pagination: { page: 1, pageSize: 100, totalItems: 1, totalPages: 1 } })))
+    const service = new ProductService({ authenticatedFetch } as unknown as AuthService)
+    const result = await service.listProducts()
+    expect(result[0]).toMatchObject({ category: currentBackendProduct.category, availableStock: 1, colorfulLifeCategory: 'HARRY_POTTER' })
   })
 
   it('uses the backend feature and catalogue artwork contracts', async () => {

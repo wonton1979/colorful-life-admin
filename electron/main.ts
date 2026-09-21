@@ -4,12 +4,14 @@ import { fileURLToPath } from 'node:url'
 import { AuthError, AuthService } from './auth-service.js'
 import type { LoginCredentials } from './auth-contract.js'
 import { isCreateProductRequest, isImageUploadPayload, ProductError, ProductService } from './product-service.js'
+import { CategoryError, CategoryService } from './category-service.js'
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url))
 const rendererUrl = process.env.ELECTRON_RENDERER_URL
 const backendUrl = process.env.COLORFUL_LIFE_BACKEND_URL ?? 'http://localhost:3000'
 const authService = new AuthService(backendUrl, (input, init) => fetch(input, init))
 const productService = new ProductService(authService)
+const categoryService = new CategoryService(authService)
 
 const isLoginCredentials = (value: unknown): value is LoginCredentials =>
   typeof value === 'object' &&
@@ -55,6 +57,22 @@ const validateCatalogueArtwork = (image: unknown) => {
 ipcMain.handle('admin-products:set-feature', async (_event, listingId: unknown) => productService.setFeatureProduct(validateListingId(listingId)))
 ipcMain.handle('admin-products:upload-catalogue-artwork', async (_event, listingId: unknown, image: unknown) => productService.uploadCatalogueArtwork(validateListingId(listingId), validateCatalogueArtwork(image)))
 ipcMain.handle('admin-products:remove-catalogue-artwork', async (_event, listingId: unknown) => productService.removeCatalogueArtwork(validateListingId(listingId)))
+
+const validateCategoryId = (categoryId: unknown): number => {
+  if (typeof categoryId !== 'number' || !Number.isInteger(categoryId) || categoryId <= 0) throw new CategoryError('validation', 'Invalid category.')
+  return categoryId
+}
+
+ipcMain.handle('admin-categories:list', () => categoryService.list())
+ipcMain.handle('admin-categories:update', async (_event, categoryId: unknown, update: unknown) => {
+  if (typeof update !== 'object' || update === null || typeof (update as Record<string, unknown>).name !== 'string') throw new CategoryError('validation', 'Invalid category details.')
+  return categoryService.update(validateCategoryId(categoryId), update as { name: string; subtitle: string | null; description: string | null })
+})
+ipcMain.handle('admin-categories:upload-artwork', async (_event, categoryId: unknown, image: unknown) => {
+  if (!isImageUploadPayload(image)) throw new CategoryError('validation', 'Invalid category artwork.')
+  return categoryService.uploadArtwork(validateCategoryId(categoryId), image)
+})
+ipcMain.handle('admin-categories:remove-artwork', async (_event, categoryId: unknown) => categoryService.removeArtwork(validateCategoryId(categoryId)))
 
 const createWindow = (): void => {
   const window = new BrowserWindow({

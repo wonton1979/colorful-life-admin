@@ -32,6 +32,14 @@ export interface LegoProduct {
   updatedAt: string
 }
 
+export interface BackendCategory {
+  id: number
+  name: string
+  subtitle: string | null
+  description: string | null
+  imageUrl: string | null
+}
+
 export interface ListingImage {
   id: number
   listingId: number
@@ -46,6 +54,7 @@ export interface ProductListing {
   id: number
   legoProductId: number
   colorfulLifeCategory: ColorfulLifeCategory
+  category: BackendCategory | null
   catalogueArtworkUrl: string | null
   catalogueArtworkPublicId: string | null
   isFeatureProduct: boolean
@@ -53,6 +62,7 @@ export interface ProductListing {
   originalPrice: string
   salePrice: string | null
   currentStock: number
+  availableStock: number
   createdAt: string
   updatedAt: string
   legoProduct: LegoProduct

@@ -11,7 +11,7 @@ if (!preloadSource.includes("contextBridge.exposeInMainWorld('adminAuth'")) {
 if (preloadSource.includes("exposeInMainWorld('electron'") || preloadSource.includes("exposeInMainWorld('ipcRenderer'")) {
   throw new Error('The preload must not expose raw Electron objects.')
 }
-if (JSON.stringify(channels) !== JSON.stringify(['admin-auth:login', 'admin-auth:restore', 'admin-auth:logout', 'admin-products:create', 'admin-products:list', 'admin-products:upload-image', 'admin-products:set-feature', 'admin-products:upload-catalogue-artwork', 'admin-products:remove-catalogue-artwork'])) {
+if (JSON.stringify(channels) !== JSON.stringify(['admin-auth:login', 'admin-auth:restore', 'admin-auth:logout', 'admin-products:create', 'admin-products:list', 'admin-products:upload-image', 'admin-products:set-feature', 'admin-products:upload-catalogue-artwork', 'admin-products:remove-catalogue-artwork', 'admin-categories:list', 'admin-categories:update', 'admin-categories:upload-artwork', 'admin-categories:remove-artwork'])) {
   throw new Error(`Unexpected exposed IPC channels: ${channels.join(', ')}`)
 }
 if (!mainSource.includes('contextIsolation: true') || !mainSource.includes('nodeIntegration: false')) {
