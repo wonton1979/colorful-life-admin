@@ -5,6 +5,7 @@ import { AuthError, AuthService } from './auth-service.js'
 import type { LoginCredentials } from './auth-contract.js'
 import { isCreateProductRequest, isImageUploadPayload, ProductError, ProductService } from './product-service.js'
 import { CategoryError, CategoryService } from './category-service.js'
+import { PurchaseError, PurchaseService } from './purchase-service.js'
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url))
 const rendererUrl = process.env.ELECTRON_RENDERER_URL
@@ -12,6 +13,7 @@ const backendUrl = process.env.COLORFUL_LIFE_BACKEND_URL ?? 'http://localhost:30
 const authService = new AuthService(backendUrl, (input, init) => fetch(input, init))
 const productService = new ProductService(authService)
 const categoryService = new CategoryService(authService)
+const purchaseService = new PurchaseService(authService)
 
 const isLoginCredentials = (value: unknown): value is LoginCredentials =>
   typeof value === 'object' &&
@@ -73,6 +75,24 @@ ipcMain.handle('admin-categories:upload-artwork', async (_event, categoryId: unk
   return categoryService.uploadArtwork(validateCategoryId(categoryId), image)
 })
 ipcMain.handle('admin-categories:remove-artwork', async (_event, categoryId: unknown) => categoryService.removeArtwork(validateCategoryId(categoryId)))
+
+const validatePurchaseId = (purchaseId: unknown): number => {
+  if (typeof purchaseId !== 'number' || !Number.isInteger(purchaseId) || purchaseId <= 0) throw new PurchaseError('validation', 'Invalid purchase.')
+  return purchaseId
+}
+const validatePage = (value: unknown, fallback: number): number => value === undefined ? fallback : typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : (() => { throw new PurchaseError('validation', 'Invalid purchase history page.') })()
+const validateLimit = (value: unknown, fallback: number): number => value === undefined ? fallback : typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 100 ? value : (() => { throw new PurchaseError('validation', 'Invalid purchase history limit.') })()
+
+const validatePdf = (file: unknown): { bytes: Uint8Array; filename: string; mimeType: 'application/pdf' } => {
+  if (typeof file !== 'object' || file === null) throw new PurchaseError('validation', 'Choose a PDF purchase document.')
+  const value = file as Record<string, unknown>
+  if (!(value.bytes instanceof Uint8Array) || value.bytes.byteLength === 0 || value.bytes.byteLength > 10 * 1024 * 1024 || typeof value.filename !== 'string' || value.filename.trim() === '' || value.mimeType !== 'application/pdf') throw new PurchaseError('validation', 'Choose a PDF purchase document no larger than 10 MB.')
+  return { bytes: value.bytes, filename: value.filename, mimeType: 'application/pdf' }
+}
+
+ipcMain.handle('admin-purchases:import-pdf', async (_event, file: unknown) => purchaseService.importPdf(validatePdf(file)))
+ipcMain.handle('admin-purchases:list', async (_event, page: unknown, limit: unknown) => purchaseService.list(validatePage(page, 1), validateLimit(limit, 20)))
+ipcMain.handle('admin-purchases:get', async (_event, purchaseId: unknown) => purchaseService.get(validatePurchaseId(purchaseId)))
 
 const createWindow = (): void => {
   const window = new BrowserWindow({
