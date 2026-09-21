@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { AdminAuthApi } from './auth-contract.js'
 import type { AdminProductsApi } from './product-contract.js'
 import type { AdminCategoriesApi } from './category-contract.js'
+import type { AdminPurchasesApi } from './purchase-contract.js'
 
 // Keep the preload as the only future boundary for renderer-to-main IPC.
 const adminAuth: AdminAuthApi = {
@@ -31,3 +32,11 @@ const adminCategories: AdminCategoriesApi = {
 }
 
 contextBridge.exposeInMainWorld('adminCategories', adminCategories)
+
+const adminPurchases: AdminPurchasesApi = {
+  importPdf: (file) => ipcRenderer.invoke('admin-purchases:import-pdf', file),
+  list: (page, limit) => ipcRenderer.invoke('admin-purchases:list', page, limit),
+  get: (purchaseId) => ipcRenderer.invoke('admin-purchases:get', purchaseId),
+}
+
+contextBridge.exposeInMainWorld('adminPurchases', adminPurchases)

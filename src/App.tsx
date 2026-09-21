@@ -4,6 +4,7 @@ import './App.css'
 import AddProduct from './AddProduct'
 import CataloguePresentation from './CataloguePresentation'
 import Categories from './Categories'
+import Purchases from './Purchases'
 import type { ColorfulLifeCategory, ProductListing } from '../electron/product-contract'
 
 type ViewState = 'restoring' | 'signed-out' | 'signed-in'
@@ -18,7 +19,7 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [presentationRefreshToken, setPresentationRefreshToken] = useState(0)
   const [presentationRefreshCategory, setPresentationRefreshCategory] = useState<ColorfulLifeCategory | null>(null)
-  const [section, setSection] = useState<'products' | 'categories'>('products')
+  const [section, setSection] = useState<'products' | 'categories' | 'purchases'>('products')
 
   useEffect(() => {
     if (!window.adminAuth) return
@@ -76,8 +77,8 @@ function App() {
           <div><p className="eyebrow">COLORFUL LIFE</p><div className="workspace-title"><h1>Admin workspace</h1><span className="admin-status" aria-label="Administrator access confirmed">✓</span><span className="admin-email">{user.email}</span></div></div>
           <button className="button button-secondary" type="button" onClick={() => void handleLogout()}>Sign out</button>
         </header>
-        <nav className="workspace-nav" aria-label="Admin sections"><button className={`button ${section === 'products' ? 'button-primary' : 'button-secondary'}`} type="button" onClick={() => setSection('products')}>Products</button><button className={`button ${section === 'categories' ? 'button-primary' : 'button-secondary'}`} type="button" onClick={() => setSection('categories')}>Categories</button></nav>
-        {section === 'categories' ? <Categories /> : <div className="catalogue-workspace">
+        <nav className="workspace-nav" aria-label="Admin sections"><button className={`button ${section === 'products' ? 'button-primary' : 'button-secondary'}`} type="button" onClick={() => setSection('products')}>Products</button><button className={`button ${section === 'categories' ? 'button-primary' : 'button-secondary'}`} type="button" onClick={() => setSection('categories')}>Categories</button><button className={`button ${section === 'purchases' ? 'button-primary' : 'button-secondary'}`} type="button" onClick={() => setSection('purchases')}>Purchases</button></nav>
+        {section === 'categories' ? <Categories /> : section === 'purchases' ? <Purchases /> : <div className="catalogue-workspace">
           <AddProduct onProductCreated={handleProductCreated} />
           <CataloguePresentation refreshToken={presentationRefreshToken} refreshCategory={presentationRefreshCategory} />
         </div>}
