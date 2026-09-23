@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { AuthError, AuthService } from './auth-service.js'
 import type { LoginCredentials } from './auth-contract.js'
 import { isCreateProductRequest, isImageUploadPayload, ProductError, ProductService } from './product-service.js'
-import { CategoryError, CategoryService } from './category-service.js'
+import { CategoryError, CategoryService, validateCategoryCreate } from './category-service.js'
 import { PurchaseError, PurchaseService, validateAmendment, validateReceipt, validateResolution, validateListingCreation } from './purchase-service.js'
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url))
@@ -66,6 +66,7 @@ const validateCategoryId = (categoryId: unknown): number => {
 }
 
 ipcMain.handle('admin-categories:list', () => categoryService.list())
+ipcMain.handle('admin-categories:create', (_event, input: unknown) => categoryService.create(validateCategoryCreate(input)))
 ipcMain.handle('admin-categories:update', async (_event, categoryId: unknown, update: unknown) => {
   if (typeof update !== 'object' || update === null || typeof (update as Record<string, unknown>).name !== 'string') throw new CategoryError('validation', 'Invalid category details.')
   return categoryService.update(validateCategoryId(categoryId), update as { name: string; subtitle: string | null; description: string | null })

@@ -19,7 +19,7 @@ describe('CataloguePresentation', () => {
       uploadCatalogueArtwork: vi.fn().mockResolvedValue({ url: 'https://cdn.example/new-artwork.jpg', publicId: 'stored-1' }), removeCatalogueArtwork: vi.fn().mockResolvedValue(undefined),
       listProducts: vi.fn().mockResolvedValue([makeListing(1, true, 'https://cdn.example/current.jpg'), makeListing(2)]),
     }
-    window.adminCategories = { list: vi.fn().mockResolvedValue(categories), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn() }
+    window.adminCategories = { list: vi.fn().mockResolvedValue(categories), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn() }
   })
 
   it('renders Feature and Standard state, category, and only catalogue artwork preview', async () => {
