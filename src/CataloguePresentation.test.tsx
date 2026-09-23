@@ -48,6 +48,9 @@ describe('CataloguePresentation', () => {
     expect(makeFeature).toBeDisabled()
     resolveFeature({ id: 2, colorfulLifeCategory: 'VEHICLES', isFeatureProduct: true })
     await waitFor(() => expect(screen.getAllByText('Feature')).toHaveLength(1))
+    expect(screen.getByText('Vehicle 2').closest('article')).toHaveClass('presentation-card-feature')
+    expect(screen.getByText('Vehicle 1').closest('article')).not.toHaveClass('presentation-card-feature')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(listProducts).toHaveBeenCalledTimes(2)
   })
 

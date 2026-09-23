@@ -60,13 +60,13 @@ describe('ProductService', () => {
     expect(result[0]).toMatchObject({ category: currentBackendProduct.category, availableStock: 1, colorfulLifeCategory: 'HARRY_POTTER' })
   })
 
-  it('uses the backend feature and catalogue artwork contracts', async () => {
+  it('parses the actual feature response and refreshes presentation state separately', async () => {
     const authenticatedFetch = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 123, colorfulLifeCategory: 'VEHICLES', isFeatureProduct: true })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 123, isFeatureProduct: true })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ catalogueArtwork: { url: 'https://cdn.example/artwork.jpg', publicId: 'stored-artwork' } })))
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
     const service = new ProductService({ authenticatedFetch } as unknown as AuthService)
-    expect(await service.setFeatureProduct(123)).toEqual({ id: 123, colorfulLifeCategory: 'VEHICLES', isFeatureProduct: true })
+    expect(await service.setFeatureProduct(123)).toEqual({ id: 123, isFeatureProduct: true })
     const artwork = await service.uploadCatalogueArtwork(123, { bytes: new Uint8Array([1]), filename: 'artwork.jpg', mimeType: 'image/jpeg' })
     expect(artwork).toEqual({ url: 'https://cdn.example/artwork.jpg', publicId: 'stored-artwork' })
     await service.removeCatalogueArtwork(123)
