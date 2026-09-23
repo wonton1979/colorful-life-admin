@@ -62,7 +62,7 @@ const parseImage = (value: unknown): ListingImage => {
   return { id: value.id, listingId: value.listingId, url: value.url, publicId: value.publicId, altText: value.altText, sortOrder: value.sortOrder, createdAt: value.createdAt }
 }
 
-const parseProduct = (value: unknown): ProductListing => {
+export const parseProduct = (value: unknown): ProductListing => {
   if (!isRecord(value) || !isNumber(value.id) || !isNumber(value.legoProductId) || (!isString(value.catalogueArtworkUrl) && value.catalogueArtworkUrl !== null) || (!isString(value.catalogueArtworkPublicId) && value.catalogueArtworkPublicId !== null) || typeof value.isFeatureProduct !== 'boolean' || !isString(value.condition) || !isString(value.originalPrice) || (!isString(value.salePrice) && value.salePrice !== null) || !isNumber(value.currentStock) || (!isNumber(value.availableStock) && value.availableStock !== undefined) || !isString(value.createdAt) || !isString(value.updatedAt) || !isRecord(value.legoProduct) || !Array.isArray(value.listingImages)) {
     throw new ProductError('malformed-response', 'The server returned an invalid product response.')
   }
@@ -137,12 +137,12 @@ export class ProductService {
     return parseUploadResponse(await response.json())
   }
 
-  async setFeatureProduct(listingId: number): Promise<{ id: number; colorfulLifeCategory: ColorfulLifeCategory; isFeatureProduct: boolean }> {
+  async setFeatureProduct(listingId: number): Promise<{ id: number; isFeatureProduct: boolean }> {
     const response = await this.authService.authenticatedFetch(`/products/${listingId}/feature`, { method: 'PATCH' })
     if (!response.ok) throw await errorForResponse(response, 'feature')
     const value: unknown = await response.json()
-    if (!isRecord(value) || !isNumber(value.id) || !isString(value.colorfulLifeCategory) || typeof value.isFeatureProduct !== 'boolean') throw new ProductError('malformed-response', 'The server returned an invalid feature product response.')
-    return { id: value.id, colorfulLifeCategory: value.colorfulLifeCategory as ColorfulLifeCategory, isFeatureProduct: value.isFeatureProduct }
+    if (!isRecord(value) || !isNumber(value.id) || typeof value.isFeatureProduct !== 'boolean') throw new ProductError('malformed-response', 'The server returned an invalid feature product response.')
+    return { id: value.id, isFeatureProduct: value.isFeatureProduct }
   }
 
   async uploadCatalogueArtwork(listingId: number, image: ImageUploadPayload): Promise<CatalogueArtwork> {

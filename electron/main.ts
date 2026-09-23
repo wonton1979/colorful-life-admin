@@ -5,7 +5,7 @@ import { AuthError, AuthService } from './auth-service.js'
 import type { LoginCredentials } from './auth-contract.js'
 import { isCreateProductRequest, isImageUploadPayload, ProductError, ProductService } from './product-service.js'
 import { CategoryError, CategoryService } from './category-service.js'
-import { PurchaseError, PurchaseService } from './purchase-service.js'
+import { PurchaseError, PurchaseService, validateAmendment, validateReceipt, validateResolution, validateListingCreation } from './purchase-service.js'
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url))
 const rendererUrl = process.env.ELECTRON_RENDERER_URL
@@ -93,6 +93,15 @@ const validatePdf = (file: unknown): { bytes: Uint8Array; filename: string; mime
 ipcMain.handle('admin-purchases:import-pdf', async (_event, file: unknown) => purchaseService.importPdf(validatePdf(file)))
 ipcMain.handle('admin-purchases:list', async (_event, page: unknown, limit: unknown) => purchaseService.list(validatePage(page, 1), validateLimit(limit, 20)))
 ipcMain.handle('admin-purchases:get', async (_event, purchaseId: unknown) => purchaseService.get(validatePurchaseId(purchaseId)))
+ipcMain.handle('admin-purchases:review', (_event, id: unknown) => purchaseService.review(validatePurchaseId(id)))
+ipcMain.handle('admin-purchases:amend', (_event, id: unknown, itemId: unknown, input: unknown) => purchaseService.amend(validatePurchaseId(id), validatePurchaseId(itemId), validateAmendment(input)))
+ipcMain.handle('admin-purchases:resolve', (_event, id: unknown, groupId: unknown, input: unknown) => purchaseService.resolve(validatePurchaseId(id), validatePurchaseId(groupId), validateResolution(input)))
+ipcMain.handle('admin-purchases:receive', (_event, id: unknown, groupId: unknown, input: unknown) => purchaseService.receive(validatePurchaseId(id), validatePurchaseId(groupId), validateReceipt(input)))
+ipcMain.handle('admin-purchases:search-products', (_event, id: unknown, query: unknown) => {
+  if (typeof query !== 'string' || !query.trim() || query.length > 100) throw new PurchaseError('validation', 'Enter a product search')
+  return purchaseService.searchProducts(validatePurchaseId(id), query.trim())
+})
+ipcMain.handle('admin-purchases:create-listing', (_event, id: unknown, input: unknown) => purchaseService.createListing(validatePurchaseId(id), validateListingCreation(input)))
 
 const createWindow = (): void => {
   const window = new BrowserWindow({

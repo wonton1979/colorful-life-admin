@@ -34,6 +34,12 @@ const adminCategories: AdminCategoriesApi = {
 contextBridge.exposeInMainWorld('adminCategories', adminCategories)
 
 const adminPurchases: AdminPurchasesApi = {
+  review: (id) => ipcRenderer.invoke('admin-purchases:review', id),
+  amend: (id, itemId, input) => ipcRenderer.invoke('admin-purchases:amend', id, itemId, input),
+  resolve: (id, groupId, input) => ipcRenderer.invoke('admin-purchases:resolve', id, groupId, input),
+  receive: (id, groupId, input) => ipcRenderer.invoke('admin-purchases:receive', id, groupId, input),
+  searchProducts: (id, query) => ipcRenderer.invoke('admin-purchases:search-products', id, query),
+  createListing: (id, input) => ipcRenderer.invoke('admin-purchases:create-listing', id, input),
   importPdf: (file) => ipcRenderer.invoke('admin-purchases:import-pdf', file),
   list: (page, limit) => ipcRenderer.invoke('admin-purchases:list', page, limit),
   get: (purchaseId) => ipcRenderer.invoke('admin-purchases:get', purchaseId),

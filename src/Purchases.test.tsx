@@ -8,7 +8,7 @@ describe('Purchases', () => {
   afterEach(() => cleanup())
 
   beforeEach(() => {
-    window.adminPurchases = { importPdf: vi.fn().mockResolvedValue({ message: 'Purchase invoice imported successfully', importHash: 'hash' }), list: vi.fn().mockResolvedValue({ purchases: [purchase], pagination: { page: 1, limit: 20, total: 1, totalPages: 1 } }), get: vi.fn().mockResolvedValue(purchase) }
+    window.adminPurchases = { review: vi.fn().mockResolvedValue({ purchase, revision: 'a'.repeat(64), totalCost: '0.00', groups: [] }), amend: vi.fn(), resolve: vi.fn(), receive: vi.fn(), searchProducts: vi.fn(), createListing: vi.fn(), importPdf: vi.fn().mockResolvedValue({ message: 'Purchase invoice imported successfully', importHash: 'hash' }), list: vi.fn().mockResolvedValue({ purchases: [purchase], pagination: { page: 1, limit: 20, total: 1, totalPages: 1 } }), get: vi.fn().mockResolvedValue(purchase) }
   })
 
   it('rejects non-PDF files and imports a selected PDF', async () => {
@@ -26,7 +26,7 @@ describe('Purchases', () => {
     render(<Purchases />)
     await waitFor(() => expect(screen.getByText('ORDER-1')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'View details' }))
-    await waitFor(() => expect(window.adminPurchases.get).toHaveBeenCalledWith(3))
+    await waitFor(() => expect(window.adminPurchases.review).toHaveBeenCalledWith(3))
     expect(screen.getByRole('heading', { name: 'ORDER-1' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Purchase History/ }))
     expect(screen.getByText('Purchase History')).toBeInTheDocument()

@@ -13,7 +13,7 @@ if (!preloadSource.includes("contextBridge.exposeInMainWorld('adminAuth'")) {
 if (preloadSource.includes("exposeInMainWorld('electron'") || preloadSource.includes("exposeInMainWorld('ipcRenderer'")) {
   throw new Error('The preload must not expose raw Electron objects.')
 }
-if (JSON.stringify(channels) !== JSON.stringify(['admin-auth:login', 'admin-auth:restore', 'admin-auth:logout', 'admin-products:create', 'admin-products:list', 'admin-products:upload-image', 'admin-products:set-feature', 'admin-products:upload-catalogue-artwork', 'admin-products:remove-catalogue-artwork', 'admin-categories:list', 'admin-categories:update', 'admin-categories:upload-artwork', 'admin-categories:remove-artwork', 'admin-purchases:import-pdf', 'admin-purchases:list', 'admin-purchases:get'])) {
+if (JSON.stringify(channels) !== JSON.stringify(['admin-auth:login', 'admin-auth:restore', 'admin-auth:logout', 'admin-products:create', 'admin-products:list', 'admin-products:upload-image', 'admin-products:set-feature', 'admin-products:upload-catalogue-artwork', 'admin-products:remove-catalogue-artwork', 'admin-categories:list', 'admin-categories:update', 'admin-categories:upload-artwork', 'admin-categories:remove-artwork', 'admin-purchases:review', 'admin-purchases:amend', 'admin-purchases:resolve', 'admin-purchases:receive', 'admin-purchases:search-products', 'admin-purchases:create-listing', 'admin-purchases:import-pdf', 'admin-purchases:list', 'admin-purchases:get'])) {
   throw new Error(`Unexpected exposed IPC channels: ${channels.join(', ')}`)
 }
 if (!mainSource.includes('contextIsolation: true') || !mainSource.includes('nodeIntegration: false')) {
@@ -32,7 +32,8 @@ if (!preloadSource.includes("contextBridge.exposeInMainWorld('adminPurchases'"))
 if (!builtPreloadSource.includes("exposeInMainWorld('adminPurchases'")) {
   throw new Error('The compiled preload must expose the adminPurchases bridge.')
 }
-for (const channel of ['admin-purchases:import-pdf', 'admin-purchases:list', 'admin-purchases:get']) {
+for (const channel of ['admin-purchases:review', 'admin-purchases:amend', 'admin-purchases:resolve', 'admin-purchases:receive', 'admin-purchases:search-products', 'admin-purchases:create-listing', 'admin-purchases:import-pdf', 'admin-purchases:list', 'admin-purchases:get']) {
+  if (!builtPreloadSource.includes(channel)) throw new Error('Compiled preload missing ' + channel)
   if (!builtMainSource.includes(`ipcMain.handle('${channel}'`)) {
     throw new Error(`The compiled main process must register ${channel}.`)
   }

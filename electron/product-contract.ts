@@ -95,7 +95,7 @@ export interface AdminProductsApi {
   createProduct(request: CreateProductRequest): Promise<ProductListing>
   listProducts(): Promise<ProductListing[]>
   uploadListingImage(listingId: number, image: ImageUploadPayload): Promise<ListingImage>
-  setFeatureProduct(listingId: number): Promise<{ id: number; colorfulLifeCategory: ColorfulLifeCategory; isFeatureProduct: boolean }>
+  setFeatureProduct(listingId: number): Promise<{ id: number; isFeatureProduct: boolean }>
   uploadCatalogueArtwork(listingId: number, image: ImageUploadPayload): Promise<CatalogueArtwork>
   removeCatalogueArtwork(listingId: number): Promise<void>
 }

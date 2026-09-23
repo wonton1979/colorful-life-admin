@@ -54,7 +54,38 @@ export interface PurchaseImportResult {
 }
 
 export interface AdminPurchasesApi {
+  review(purchaseId: number): Promise<PurchaseReview>
+  amend(purchaseId: number, itemId: number, input: PurchaseAmendment): Promise<PurchaseReview>
+  resolve(purchaseId: number, groupId: number, input: { revision: string; productListingId: number | null }): Promise<PurchaseReview>
+  receive(purchaseId: number, groupId: number, input: { revision: string }): Promise<PurchaseReview>
+  searchProducts(purchaseId: number, query: string): Promise<ReviewProduct[]>
+  createListing(purchaseId: number, input: ReviewListingCreation): Promise<import('./product-contract.js').ProductListing>
   importPdf(file: { bytes: Uint8Array; filename: string; mimeType: 'application/pdf' }): Promise<PurchaseImportResult>
   list(page?: number, limit?: number): Promise<PurchasePage>
   get(purchaseId: number): Promise<Purchase>
+}
+
+export interface ReviewProduct { id: number; setNumber: string; title: string }
+export type ReviewListingCreation = {
+  condition: 'NEW' | 'USED_LIKE_NEW'; originalPrice: number; salePrice?: number; currentStock: 0
+} & ({ existingProductId: number } | {
+  setNumber: string; title: string; description?: string; theme: string; categoryId: number; ageRecommendation: string; pieceCount: number
+})
+export interface PurchaseAmendment {
+  revision: string; sourceDescription: string; sourceSetNumber: string | null
+  quantity?: number; originalGrossUnitCost?: string
+}
+export interface ReviewLine extends PurchaseItem {
+  purchaseDocumentId: number; canAmend: boolean; canAmendCost: boolean
+}
+export interface ReviewGroup {
+  id: number; sourceItemIds: number[]; description: string
+  externalProductId: string | null; sourceSetNumber: string | null
+  quantity: number; pendingQuantity: number; totalCost: string; unitCost: string
+  costKind: 'UNIT' | 'WEIGHTED_AVERAGE'
+  listing: (ReviewProduct & { condition: 'NEW' | 'USED_LIKE_NEW'; active: boolean }) | null
+  state: 'UNRESOLVED' | 'MATCHED' | 'RECEIVED'; canResolve: boolean; lines: ReviewLine[]
+}
+export interface PurchaseReview {
+  purchase: Purchase; revision: string; totalCost: string; groups: ReviewGroup[]
 }

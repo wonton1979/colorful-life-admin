@@ -1,0 +1,20 @@
+.purchase-review h2 { margin-bottom: 8px; }
+.purchase-review h3 { overflow-wrap: anywhere; }
+.review-toolbar, .review-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.review-toolbar { margin-bottom: 18px; }
+.review-actions { margin: 16px 0; }
+.purchase-review .button { margin-top: 0; }
+.review-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 16px 0; }
+.review-facts span { display: grid; gap: 6px; }
+.review-editor { padding: 16px 0; display: grid; gap: 12px; }
+.review-editor label { display: grid; gap: 6px; }
+.review-editor select { max-width: 100%; min-width: 0; }
+.review-line-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); }
+.review-line-form > strong, .review-line-form > p { grid-column: 1 / -1; }
+.review-total { font-size: 20px; padding: 16px 0; }
+.purchase-review summary { cursor: pointer; padding: 12px 0; }
+@media (max-width: 600px) {
+  .review-facts, .review-line-form { grid-template-columns: 1fr; }
+  .purchase-review .document-heading { display: grid; gap: 12px; }
+  .review-actions .button { width: 100%; }
+}

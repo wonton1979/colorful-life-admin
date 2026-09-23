@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
-import type { Purchase, PurchaseImportResult } from '../electron/purchase-contract.js'
+import PurchaseReview from './PurchaseReview'
+import type { Purchase, PurchaseImportResult, PurchaseReview as Review } from '../electron/purchase-contract.js'
 
 const maximumPdfBytes = 10 * 1024 * 1024
 const pageSize = 20
 
 const messageFor = (error: unknown): string => error instanceof Error ? error.message : 'The purchase operation could not be completed.'
 const formatDate = (value: string | null): string => value ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(new Date(value)) : 'Date not provided'
-const money = (value: string): string => `£${Number(value).toFixed(2)}`
 
 function Purchases() {
   const [file, setFile] = useState<File | null>(null)
@@ -19,7 +19,7 @@ function Purchases() {
   const [totalPages, setTotalPages] = useState(1)
   const [historyLoading, setHistoryLoading] = useState(true)
   const [historyError, setHistoryError] = useState('')
-  const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null)
+  const [selectedPurchase, setSelectedPurchase] = useState<Review | null>(null)
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [detailsError, setDetailsError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -84,7 +84,7 @@ function Purchases() {
     setDetailsLoading(true)
     setDetailsError('')
     try {
-      setSelectedPurchase(await window.adminPurchases.get(purchaseId))
+      setSelectedPurchase(await window.adminPurchases.review(purchaseId))
     } catch (error) {
       setDetailsError(messageFor(error))
     } finally {
@@ -92,7 +92,7 @@ function Purchases() {
     }
   }
 
-  if (selectedPurchase) return <PurchaseDetails purchase={selectedPurchase} onBack={() => setSelectedPurchase(null)} />
+  if (selectedPurchase) return <PurchaseReview initialReview={selectedPurchase} onBack={() => setSelectedPurchase(null)} />
 
   return (
     <section className="purchases-workspace" aria-labelledby="purchases-title">
@@ -120,10 +120,6 @@ function Purchases() {
       </div>
     </section>
   )
-}
-
-function PurchaseDetails({ purchase, onBack }: { purchase: Purchase; onBack: () => void }) {
-  return <section className="purchases-workspace" aria-labelledby="purchase-details-title"><button className="button button-secondary back-button" type="button" onClick={onBack}>← Purchase History</button><div className="purchases-heading"><div><p className="eyebrow">PURCHASE DETAILS</p><h2 id="purchase-details-title">{purchase.sourceOrderReference}</h2><p className="details-meta">{formatDate(purchase.sourceOrderDate)}{purchase.merchantName ? ` · ${purchase.merchantName}` : ''}</p></div></div>{purchase.purchaseDocuments.map((document) => <article className="purchase-document" key={document.id}><div className="document-heading"><div><h3>Document {document.partNumber}</h3><p>Invoice {document.sourceInvoiceReference ?? 'reference not provided'}</p></div><span>{formatDate(document.sourceDocumentDate)}</span></div><div className="purchase-totals"><span>Merchandise <strong>{money(document.originalGrossMerchandiseTotal)}</strong></span><span>Shipping <strong>{money(document.shippingTotal)}</strong></span><span>Discount <strong>-{money(document.discountTotal)}</strong></span><span>Total paid <strong>{money(document.finalTotalPaid)}</strong></span></div><div className="purchase-items">{document.purchaseItems?.map((item) => <div className="purchase-item" key={item.id}><div><strong>{item.sourceDescription}</strong><span>{item.sourceSetNumber ? `Set ${item.sourceSetNumber} · ` : ''}Quantity {item.quantity}{item.productListingId ? ` · Listing #${item.productListingId}` : ' · Listing unresolved'}</span></div><div className="purchase-item-costs"><span>Original {money(item.originalGrossLineTotal)}</span><span>Shipping {money(item.allocatedShipping)}</span><span>Discount -{money(item.allocatedDiscount)}</span><strong>Final {money(item.finalLineCost)} · {money(item.finalUnitCost)} / unit</strong></div></div>)}</div></article>)}</section>
 }
 
 export default Purchases
