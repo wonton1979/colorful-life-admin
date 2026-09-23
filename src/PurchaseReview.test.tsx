@@ -14,7 +14,7 @@ beforeEach(() => {
   }
   window.adminProducts = { createProduct: vi.fn(), listProducts: vi.fn().mockResolvedValue([]), uploadListingImage: vi.fn(),
     setFeatureProduct: vi.fn(), uploadCatalogueArtwork: vi.fn(), removeCatalogueArtwork: vi.fn() }
-  window.adminCategories = { list: vi.fn().mockResolvedValue([]), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn() }
+  window.adminCategories = { list: vi.fn().mockResolvedValue([]), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn() }
   vi.spyOn(window, 'confirm').mockReturnValue(true)
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks() })

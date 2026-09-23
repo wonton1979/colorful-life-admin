@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('adminProducts', adminProducts)
 
 const adminCategories: AdminCategoriesApi = {
   list: () => ipcRenderer.invoke('admin-categories:list'),
+  create: (input) => ipcRenderer.invoke('admin-categories:create', input),
   update: (categoryId, update) => ipcRenderer.invoke('admin-categories:update', categoryId, update),
   uploadArtwork: (categoryId, image) => ipcRenderer.invoke('admin-categories:upload-artwork', categoryId, image),
   removeArtwork: (categoryId) => ipcRenderer.invoke('admin-categories:remove-artwork', categoryId),
