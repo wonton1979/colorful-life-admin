@@ -59,6 +59,13 @@ describe('AddProduct workflow', () => {
     expect(selector).toHaveValue('')
   })
 
+  it('keeps the normal catalogue condition choice editable', () => {
+    render(<AddProduct />)
+    const condition = screen.getByLabelText('Condition')
+    fireEvent.change(condition, { target: { value: 'USED_LIKE_NEW' } })
+    expect(condition).toHaveValue('USED_LIKE_NEW')
+  })
+
   it('uploads one image with the selected binary and keeps it as the cover', async () => {
     render(<AddProduct />)
     fillRequiredFields()

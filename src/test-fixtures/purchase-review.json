@@ -1,0 +1,139 @@
+{
+  "purchase": {
+    "id": 1,
+    "sourceOrderReference": "ORDER-1",
+    "sourceOrderDate": "2026-09-21T00:00:00.000Z",
+    "merchantName": null,
+    "createdAt": "2026-09-21T00:00:00.000Z",
+    "updatedAt": "2026-09-21T00:00:00.000Z",
+    "purchaseDocuments": [
+      {
+        "id": 10,
+        "purchaseId": 1,
+        "partNumber": 1,
+        "sourceInvoiceReference": "INVOICE-1",
+        "importHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "sourceDocumentDate": "2026-09-21T00:00:00.000Z",
+        "importedByUserId": 1,
+        "originalGrossMerchandiseTotal": "209.97",
+        "shippingTotal": "0",
+        "discountTotal": "0",
+        "finalTotalPaid": "209.97",
+        "createdAt": "2026-09-21T00:00:00.000Z",
+        "updatedAt": "2026-09-21T00:00:00.000Z",
+        "purchaseItems": [
+          {
+            "id": 101,
+            "purchaseDocumentId": 10,
+            "productListingId": 7,
+            "externalProductId": "EXACT-IDENTITY",
+            "sourceDescription": "Display model",
+            "sourceSetNumber": "75446",
+            "sourceLineNumber": 1,
+            "quantity": 1,
+            "originalGrossUnitCost": "69.99",
+            "originalGrossLineTotal": "69.99",
+            "allocatedShipping": "0",
+            "allocatedDiscount": "0",
+            "finalLineCost": "69.99",
+            "finalUnitCost": "69.99",
+            "receivedAt": null,
+            "returnedAt": null,
+            "canAmend": true,
+            "canAmendCost": true
+          },
+          {
+            "id": 102,
+            "purchaseDocumentId": 10,
+            "productListingId": 7,
+            "externalProductId": "EXACT-IDENTITY",
+            "sourceDescription": "Display model",
+            "sourceSetNumber": "75446",
+            "sourceLineNumber": 2,
+            "quantity": 2,
+            "originalGrossUnitCost": "69.99",
+            "originalGrossLineTotal": "139.98",
+            "allocatedShipping": "0",
+            "allocatedDiscount": "0",
+            "finalLineCost": "139.98",
+            "finalUnitCost": "69.99",
+            "receivedAt": null,
+            "returnedAt": null,
+            "canAmend": true,
+            "canAmendCost": true
+          }
+        ]
+      }
+    ]
+  },
+  "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "totalCost": "209.97",
+  "groups": [
+    {
+      "id": 101,
+      "sourceItemIds": [
+        101,
+        102
+      ],
+      "description": "Display model",
+      "externalProductId": "EXACT-IDENTITY",
+      "sourceSetNumber": "75446",
+      "quantity": 3,
+      "pendingQuantity": 3,
+      "totalCost": "209.97",
+      "unitCost": "69.990000",
+      "costKind": "UNIT",
+      "listing": {
+        "id": 7,
+        "condition": "NEW",
+        "active": true,
+        "title": "Display model",
+        "setNumber": "75446"
+      },
+      "state": "MATCHED",
+      "canResolve": true,
+      "lines": [
+        {
+          "id": 101,
+          "purchaseDocumentId": 10,
+          "productListingId": 7,
+          "externalProductId": "EXACT-IDENTITY",
+          "sourceDescription": "Display model",
+          "sourceSetNumber": "75446",
+          "sourceLineNumber": 1,
+          "quantity": 1,
+          "originalGrossUnitCost": "69.99",
+          "originalGrossLineTotal": "69.99",
+          "allocatedShipping": "0",
+          "allocatedDiscount": "0",
+          "finalLineCost": "69.99",
+          "finalUnitCost": "69.99",
+          "receivedAt": null,
+          "returnedAt": null,
+          "canAmend": true,
+          "canAmendCost": true
+        },
+        {
+          "id": 102,
+          "purchaseDocumentId": 10,
+          "productListingId": 7,
+          "externalProductId": "EXACT-IDENTITY",
+          "sourceDescription": "Display model",
+          "sourceSetNumber": "75446",
+          "sourceLineNumber": 2,
+          "quantity": 2,
+          "originalGrossUnitCost": "69.99",
+          "originalGrossLineTotal": "139.98",
+          "allocatedShipping": "0",
+          "allocatedDiscount": "0",
+          "finalLineCost": "139.98",
+          "finalUnitCost": "69.99",
+          "receivedAt": null,
+          "returnedAt": null,
+          "canAmend": true,
+          "canAmendCost": true
+        }
+      ]
+    }
+  ]
+}

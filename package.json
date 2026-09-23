@@ -18,9 +18,10 @@
     "verify:renderer-build": "node scripts/verify-renderer-build.mjs",
     "build:electron": "tsc -p tsconfig.electron.json",
     "electron": "electron .",
-    "test": "run-s test:unit test:electron-boundary",
+    "test": "run-s test:unit build test:electron-boundary test:electron-runtime",
     "test:unit": "vitest run",
     "test:electron-boundary": "node scripts/verify-electron-boundary.mjs",
+    "test:electron-runtime": "electron scripts/verify-purchase-runtime.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
