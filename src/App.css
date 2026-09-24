@@ -54,6 +54,25 @@ input:focus { border-color: var(--focus); box-shadow: 0 0 0 3px rgba(211, 139, 6
 .purchases-workspace { max-width: 980px; margin-top: 36px; }
 .purchases-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
 .purchases-heading h2 { margin: 0; color: #26342f; font-size: 28px; letter-spacing: -.04em; }
+.purchase-heading-actions { display: flex; gap: 10px; }
+.purchase-heading-actions .button { margin-top: 0; }
+.manual-purchase-card { margin-bottom: 24px; }
+.manual-purchase-form { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
+.manual-purchase-form > label, .manual-purchase-item label, .manual-purchase-totals label { display: grid; gap: 6px; margin: 0; }
+.manual-purchase-form input { box-sizing: border-box; }
+.manual-purchase-items, .manual-purchase-totals, .manual-purchase-actions, .manual-purchase-form > .error-message { grid-column: 1 / -1; }
+.manual-purchase-items { display: grid; gap: 12px; }
+.manual-purchase-items .product-panel-heading { align-items: center; margin: 0; }
+.manual-purchase-items .product-panel-heading h3 { margin: 0; color: #26342f; font-size: 18px; }
+.manual-purchase-items .button, .manual-purchase-actions .button { min-height: 40px; margin: 0; }
+.manual-purchase-item { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 10px; }
+.manual-purchase-item legend { padding: 0 6px; color: #26342f; font-weight: 700; }
+.manual-line-total { display: flex; align-items: center; justify-content: space-between; grid-column: 1 / -1; margin: 0; padding: 12px; color: var(--text-muted); background: #faf8f2; border-radius: 8px; }
+.manual-line-total strong, .manual-purchase-totals strong { color: #26342f; }
+.manual-remove-item { grid-column: 1 / -1; justify-self: start; }
+.manual-purchase-totals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; }
+.manual-purchase-totals p { display: flex; align-items: center; justify-content: space-between; margin: 0; padding: 10px 0; color: var(--text-muted); }
+.manual-purchase-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .purchase-import-card, .purchase-history-card, .purchase-document { padding: 26px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 .purchase-import-card h3, .purchase-history-card h3, .purchase-document h3 { margin: 0; color: #26342f; font-size: 20px; }
 .purchase-import-card > h3 { margin-bottom: 8px; }
@@ -91,3 +110,4 @@ input:focus { border-color: var(--focus); box-shadow: 0 0 0 3px rgba(211, 139, 6
 .purchase-item-costs { display: grid; flex: 0 0 210px; gap: 4px; color: var(--text-muted); font-size: 12px; text-align: right; }
 .purchase-item-costs strong { color: var(--accent-strong); }
 @media (max-width: 700px) { .purchases-heading { display: block; } .purchases-heading > .button { margin-top: 14px; } .purchase-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); } .purchase-item { display: grid; gap: 12px; } .purchase-item-costs { flex-basis: auto; text-align: left; } .purchase-row { align-items: flex-start; flex-direction: column; } .purchase-row .button { width: 100%; } }
+@media (max-width: 700px) { .purchase-heading-actions { margin-top: 12px; flex-wrap: wrap; } .manual-purchase-form, .manual-purchase-item, .manual-purchase-totals { grid-template-columns: 1fr; } }

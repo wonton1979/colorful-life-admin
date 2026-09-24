@@ -1,5 +1,5 @@
 import type { AuthService } from './auth-service.js'
-import type { AdminPurchasesApi, Purchase, PurchaseDocument, PurchaseImportResult, PurchaseItem, PurchasePage } from './purchase-contract.js'
+import type { AdminPurchasesApi, ManualPurchaseCreated, ManualPurchaseInput, Purchase, PurchaseDocument, PurchaseImportResult, PurchaseItem, PurchasePage } from './purchase-contract.js'
 import type { PurchaseReview, ReviewGroup, PurchaseAmendment, ReviewProduct, ReviewListingCreation } from './purchase-contract.js'
 import { parseProduct } from './product-service.js'
 
@@ -58,10 +58,72 @@ const parsePage = (value: unknown): PurchasePage => {
   return { purchases: value.purchases.map((purchase) => parsePurchase(purchase)), pagination: { page: value.pagination.page, limit: value.pagination.limit, total: value.pagination.total, totalPages: value.pagination.totalPages } }
 }
 
+const poundsToPence = (value: unknown, field: string): number => {
+  if (!isString(value) || !/^\d+(?:\.\d{1,2})?$/.test(value.trim())) throw new PurchaseError('validation', `${field} must be a nonnegative amount with up to two decimal places.`)
+  const [whole, fraction = ''] = value.trim().split('.')
+  const pence = Number(whole) * 100 + Number(fraction.padEnd(2, '0'))
+  if (!Number.isSafeInteger(pence)) throw new PurchaseError('validation', `${field} is too large.`)
+  return pence
+}
+
+const optionalText = (value: unknown, field: string): string | undefined => {
+  if (value === undefined) return undefined
+  if (!isString(value)) throw new PurchaseError('validation', `${field} must be text.`)
+  return value.trim() || undefined
+}
+
+export function validateManualPurchaseInput(value: unknown) {
+  if (!isRecord(value)) throw new PurchaseError('validation', 'Enter valid purchase details.')
+  const sourceOrderReference = optionalText(value.sourceOrderReference, 'Purchase reference')
+  if (!sourceOrderReference) throw new PurchaseError('validation', 'Purchase reference is required.')
+  const sourceOrderDate = optionalText(value.sourceOrderDate, 'Purchase date')
+  const sourceDocumentDate = optionalText(value.sourceDocumentDate, 'Document date')
+  for (const [label, date] of [['Purchase date', sourceOrderDate], ['Document date', sourceDocumentDate]] as const) {
+    if (date && Number.isNaN(Date.parse(date))) throw new PurchaseError('validation', `${label} must be a valid date.`)
+  }
+  const originalGrossMerchandiseTotal = poundsToPence(value.originalGrossMerchandiseTotal, 'Merchandise total')
+  const shippingTotal = poundsToPence(value.shippingTotal ?? '0', 'Shipping')
+  const discountTotal = poundsToPence(value.discountTotal ?? '0', 'Discount')
+  const finalTotalPaid = poundsToPence(value.finalTotalPaid, 'Total paid')
+  if (!Array.isArray(value.items) || value.items.length === 0) throw new PurchaseError('validation', 'Add at least one purchase item.')
+  const items = value.items.map((raw: unknown, index) => {
+    const row = index + 1
+    if (!isRecord(raw)) throw new PurchaseError('validation', `Item ${row} is invalid.`)
+    const sourceDescription = optionalText(raw.sourceDescription, `Item ${row} description`)
+    if (!sourceDescription) throw new PurchaseError('validation', `Item ${row} description is required.`)
+    if (!isNumber(raw.quantity) || !Number.isInteger(raw.quantity) || raw.quantity <= 0) throw new PurchaseError('validation', `Item ${row} quantity must be a positive whole number.`)
+    const sourceSetNumber = optionalText(raw.sourceSetNumber, `Item ${row} LEGO set number`)
+    const originalGrossUnitCost = poundsToPence(raw.originalGrossUnitCost, `Item ${row} unit cost`)
+    const originalGrossLineTotal = poundsToPence(raw.originalGrossLineTotal, `Item ${row} line total`)
+    return { sourceDescription, quantity: raw.quantity, originalGrossUnitCost, originalGrossLineTotal, ...(sourceSetNumber ? { sourceSetNumber } : {}) }
+  })
+  if (items.reduce((sum, item) => sum + item.originalGrossLineTotal, 0) !== originalGrossMerchandiseTotal) throw new PurchaseError('validation', 'Merchandise total must equal the sum of item line totals.')
+  if (finalTotalPaid !== originalGrossMerchandiseTotal + shippingTotal - discountTotal) throw new PurchaseError('validation', 'Total paid must equal merchandise plus shipping minus discount.')
+  return {
+    sourceOrderReference,
+    ...(sourceOrderDate ? { sourceOrderDate } : {}),
+    ...(optionalText(value.merchantName, 'Supplier / Retailer') ? { merchantName: optionalText(value.merchantName, 'Supplier / Retailer') } : {}),
+    ...(optionalText(value.sourceInvoiceReference, 'Invoice reference') ? { sourceInvoiceReference: optionalText(value.sourceInvoiceReference, 'Invoice reference') } : {}),
+    ...(sourceDocumentDate ? { sourceDocumentDate } : {}),
+    originalGrossMerchandiseTotal, shippingTotal, discountTotal, finalTotalPaid, items,
+  }
+}
+
 export class PurchaseService implements AdminPurchasesApi {
   private readonly auth: AuthService
 
   constructor(auth: AuthService) { this.auth = auth }
+
+  async createManual(input: ManualPurchaseInput): Promise<ManualPurchaseCreated> {
+    const response = await this.auth.authenticatedFetch('/purchases/manual', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(validateManualPurchaseInput(input)),
+    })
+    if (!response.ok) throw await responseError(response)
+    const value: unknown = await response.json()
+    if (!isRecord(value) || !isRecord(value.purchase) || !positiveId(value.purchase.id) || !isString(value.purchase.sourceOrderReference)) throw new PurchaseError('malformed-response', 'The server returned an invalid manual purchase response.')
+    const document = parseDocument(value, true)
+    return { purchaseId: value.purchase.id, documentId: document.id }
+  }
 
   private async reviewRequest(purchaseId: number, path = '', method = 'GET', body?: unknown): Promise<PurchaseReview> {
     const response = await this.auth.authenticatedFetch(`/purchases/${purchaseId}/review${path}`, {

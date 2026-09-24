@@ -35,6 +35,7 @@ const adminCategories: AdminCategoriesApi = {
 contextBridge.exposeInMainWorld('adminCategories', adminCategories)
 
 const adminPurchases: AdminPurchasesApi = {
+  createManual: (input) => ipcRenderer.invoke('admin-purchases:create-manual', input),
   review: (id) => ipcRenderer.invoke('admin-purchases:review', id),
   amend: (id, itemId, input) => ipcRenderer.invoke('admin-purchases:amend', id, itemId, input),
   resolve: (id, groupId, input) => ipcRenderer.invoke('admin-purchases:resolve', id, groupId, input),
