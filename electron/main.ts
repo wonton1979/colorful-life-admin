@@ -6,6 +6,7 @@ import type { LoginCredentials } from './auth-contract.js'
 import { isCreateProductRequest, isImageUploadPayload, ProductError, ProductService } from './product-service.js'
 import { CategoryError, CategoryService, validateCategoryCreate } from './category-service.js'
 import { PurchaseError, PurchaseService, validateAmendment, validateReceipt, validateResolution, validateListingCreation } from './purchase-service.js'
+import type { ManualPurchaseInput } from './purchase-contract.js'
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url))
 const rendererUrl = process.env.ELECTRON_RENDERER_URL
@@ -92,6 +93,7 @@ const validatePdf = (file: unknown): { bytes: Uint8Array; filename: string; mime
 }
 
 ipcMain.handle('admin-purchases:import-pdf', async (_event, file: unknown) => purchaseService.importPdf(validatePdf(file)))
+ipcMain.handle('admin-purchases:create-manual', (_event, input: unknown) => purchaseService.createManual(input as ManualPurchaseInput))
 ipcMain.handle('admin-purchases:list', async (_event, page: unknown, limit: unknown) => purchaseService.list(validatePage(page, 1), validateLimit(limit, 20)))
 ipcMain.handle('admin-purchases:get', async (_event, purchaseId: unknown) => purchaseService.get(validatePurchaseId(purchaseId)))
 ipcMain.handle('admin-purchases:review', (_event, id: unknown) => purchaseService.review(validatePurchaseId(id)))

@@ -53,7 +53,30 @@ export interface PurchaseImportResult {
   importHash: string
 }
 
+/** Monetary values are entered in pounds in the renderer and converted to pence by PurchaseService. */
+export interface ManualPurchaseInput {
+  sourceOrderReference: string
+  sourceOrderDate?: string
+  merchantName?: string
+  sourceInvoiceReference?: string
+  sourceDocumentDate?: string
+  originalGrossMerchandiseTotal: string
+  shippingTotal: string
+  discountTotal: string
+  finalTotalPaid: string
+  items: Array<{
+    sourceDescription: string
+    quantity: number
+    originalGrossUnitCost: string
+    originalGrossLineTotal: string
+    sourceSetNumber?: string
+  }>
+}
+
+export interface ManualPurchaseCreated { purchaseId: number; documentId: number }
+
 export interface AdminPurchasesApi {
+  createManual(input: ManualPurchaseInput): Promise<ManualPurchaseCreated>
   review(purchaseId: number): Promise<PurchaseReview>
   amend(purchaseId: number, itemId: number, input: PurchaseAmendment): Promise<PurchaseReview>
   resolve(purchaseId: number, groupId: number, input: { revision: string; productListingId: number | null }): Promise<PurchaseReview>

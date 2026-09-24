@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
 import PurchaseReview from './PurchaseReview'
-import type { Purchase, PurchaseImportResult, PurchaseReview as Review } from '../electron/purchase-contract.js'
+import ManualPurchaseForm from './ManualPurchaseForm'
+import type { ManualPurchaseInput, Purchase, PurchaseImportResult, PurchaseReview as Review } from '../electron/purchase-contract.js'
 
 const maximumPdfBytes = 10 * 1024 * 1024
 const pageSize = 20
@@ -22,6 +23,7 @@ function Purchases() {
   const [selectedPurchase, setSelectedPurchase] = useState<Review | null>(null)
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [detailsError, setDetailsError] = useState('')
+  const [manualPurchaseOpen, setManualPurchaseOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const loadHistory = async (nextPage = page) => {
@@ -92,11 +94,19 @@ function Purchases() {
     }
   }
 
+  const createManualPurchase = async (input: ManualPurchaseInput) => {
+    const created = await window.adminPurchases.createManual(input)
+    setManualPurchaseOpen(false)
+    await loadHistory(1)
+    await openDetails(created.purchaseId)
+  }
+
   if (selectedPurchase) return <PurchaseReview initialReview={selectedPurchase} onBack={() => setSelectedPurchase(null)} />
 
   return (
     <section className="purchases-workspace" aria-labelledby="purchases-title">
-      <div className="purchases-heading"><div><p className="eyebrow">OPERATIONS</p><h2 id="purchases-title">Purchases</h2></div><button className="button button-secondary" type="button" onClick={() => void loadHistory()} disabled={historyLoading}>{historyLoading ? 'Loading…' : 'Refresh history'}</button></div>
+      <div className="purchases-heading"><div><p className="eyebrow">OPERATIONS</p><h2 id="purchases-title">Purchases</h2></div><div className="purchase-heading-actions"><button className="button button-primary" type="button" onClick={() => { setManualPurchaseOpen(true) }}>Add Purchase</button><button className="button button-secondary" type="button" onClick={() => void loadHistory()} disabled={historyLoading}>{historyLoading ? 'Loading…' : 'Refresh history'}</button></div></div>
+      {manualPurchaseOpen && <ManualPurchaseForm onCancel={() => setManualPurchaseOpen(false)} onCreate={createManualPurchase} />}
       <div className="purchase-import-card">
         <p className="eyebrow">PURCHASE IMPORT</p><h3>Import Purchase Document</h3><p className="panel-intro">Upload a purchase document in PDF format. It will be checked and recorded securely.</p>
         <div className="pdf-dropzone" onDragOver={(event) => event.preventDefault()} onDrop={onDrop} role="group" aria-label="PDF purchase document upload">
