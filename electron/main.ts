@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { AuthError, AuthService } from './auth-service.js'
@@ -7,6 +7,7 @@ import { isCreateProductRequest, isImageUploadPayload, ProductError, ProductServ
 import { CategoryError, CategoryService, validateCategoryCreate } from './category-service.js'
 import { PurchaseError, PurchaseService, validateAmendment, validateReceipt, validateResolution, validateListingCreation } from './purchase-service.js'
 import type { ManualPurchaseInput } from './purchase-contract.js'
+import { handleEditContextMenu } from './edit-context-menu.js'
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url))
 const rendererUrl = process.env.ELECTRON_RENDERER_URL
@@ -113,6 +114,12 @@ const createWindow = (): void => {
       nodeIntegration: false,
       preload: join(currentDirectory, 'preload.cjs'),
     },
+  })
+
+  window.webContents.on('context-menu', (event, params) => {
+    handleEditContextMenu(event, { ...params.editFlags, isEditable: params.isEditable, x: params.x, y: params.y }, (template, x, y) => {
+      Menu.buildFromTemplate(template).popup({ window, x, y })
+    })
   })
 
   if (rendererUrl) {

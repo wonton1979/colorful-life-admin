@@ -5,6 +5,8 @@ const preloadSource = readFileSync(resolve('electron', 'preload.cts'), 'utf8')
 const mainSource = readFileSync(resolve('electron', 'main.ts'), 'utf8')
 const builtPreloadSource = readFileSync(resolve('dist-electron', 'preload.cjs'), 'utf8')
 const builtMainSource = readFileSync(resolve('dist-electron', 'main.js'), 'utf8')
+const editMenuSource = readFileSync(resolve('electron', 'edit-context-menu.ts'), 'utf8')
+const builtEditMenuSource = readFileSync(resolve('dist-electron', 'edit-context-menu.js'), 'utf8')
 const channels = [...preloadSource.matchAll(/ipcRenderer\.invoke\('([^']+)'/g)].map((match) => match[1])
 
 if (!preloadSource.includes("contextBridge.exposeInMainWorld('adminAuth'")) {
@@ -19,6 +21,15 @@ if (JSON.stringify(channels) !== JSON.stringify(['admin-auth:login', 'admin-auth
 if (!mainSource.includes('contextIsolation: true') || !mainSource.includes('nodeIntegration: false')) {
   throw new Error('Electron renderer security settings are not enabled.')
 }
+if (!mainSource.includes("webContents.on('context-menu'") || !mainSource.includes('handleEditContextMenu(event, { ...params.editFlags')) {
+  throw new Error('Electron must limit the native edit context menu to editable targets.')
+}
+if (!editMenuSource.includes("role: 'cut'") || !editMenuSource.includes("role: 'copy'") || !editMenuSource.includes("role: 'paste'") || !editMenuSource.includes("role: 'selectAll'") || !editMenuSource.includes('if (!isEditable) return null')) {
+  throw new Error('The edit context menu must contain only native editing actions and ignore non-editable targets.')
+}
+if (mainSource.includes('before-input-event') || preloadSource.includes('clipboard') || preloadSource.includes('contextMenu')) {
+  throw new Error('Context-menu support must not intercept keyboard shortcuts or expose clipboard APIs.')
+}
 if (!mainSource.includes("preload: join(currentDirectory, 'preload.cjs')")) {
   throw new Error('Electron must load the CommonJS-compatible preload output.')
 }
@@ -31,6 +42,9 @@ if (!preloadSource.includes("contextBridge.exposeInMainWorld('adminPurchases'"))
 }
 if (!builtPreloadSource.includes("exposeInMainWorld('adminPurchases'")) {
   throw new Error('The compiled preload must expose the adminPurchases bridge.')
+}
+if (!builtMainSource.includes("webContents.on('context-menu'") || !builtEditMenuSource.includes("role: 'selectAll'")) {
+  throw new Error('The compiled Electron main process must include the native edit context menu.')
 }
 if (!builtPreloadSource.includes('admin-categories:create') || !builtMainSource.includes("ipcMain.handle('admin-categories:create'")) {
   throw new Error('The compiled Electron boundary must expose category creation.')
