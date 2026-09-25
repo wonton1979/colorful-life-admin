@@ -41,16 +41,30 @@ ipcMain.handle('admin-products:create', async (_event, request: unknown) => {
 })
 
 ipcMain.handle('admin-products:list', () => productService.listProducts())
+ipcMain.handle('admin-products:list-admin-product-listings', () => productService.listAdminProductListings())
 
-ipcMain.handle('admin-products:upload-image', async (_event, listingId: unknown, image: unknown) => {
-  if (typeof listingId !== 'number' || !Number.isInteger(listingId) || listingId <= 0 || !isImageUploadPayload(image)) throw new ProductError('validation', 'Invalid product image.')
-  const validListingId = listingId
-  return productService.uploadListingImage(validListingId, image)
+ipcMain.handle('admin-products:lookup-lego-products', async (_event, query: unknown, page: unknown = 1, pageSize: unknown = 20) => {
+  if (typeof query !== 'string' || query.trim().length < 1 || query.trim().length > 100 || typeof page !== 'number' || !Number.isInteger(page) || page < 1 || page > 10000 || typeof pageSize !== 'number' || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) {
+    throw new ProductError('validation', 'Enter a search term of up to 100 characters.')
+  }
+  return productService.searchLegoProducts(query.trim(), page, pageSize)
 })
 
-const validateListingId = (listingId: unknown): number => {
-  if (typeof listingId !== 'number' || !Number.isInteger(listingId) || listingId <= 0) throw new ProductError('validation', 'Invalid product listing.')
-  return listingId
+ipcMain.handle('admin-products:create-used-offer', async (_event, productId: unknown, input: unknown) => {
+  if (typeof productId !== 'number' || !Number.isInteger(productId) || productId <= 0 || typeof input !== 'object' || input === null || !('salePrice' in input) || typeof input.salePrice !== 'number' || !Number.isFinite(input.salePrice) || input.salePrice <= 0 || !('damageDescription' in input) || typeof input.damageDescription !== 'string' || input.damageDescription.trim().length < 1 || input.damageDescription.trim().length > 2000 || !('conditionPhotos' in input) || !Array.isArray(input.conditionPhotos) || input.conditionPhotos.length < 1 || input.conditionPhotos.length > 3 || !input.conditionPhotos.every((photo: unknown) => isImageUploadPayload(photo) && photo.bytes.byteLength > 0 && photo.altText === undefined)) {
+    throw new ProductError('validation', 'Provide a valid price, damage description, and 1 to 3 condition photos.')
+  }
+  return productService.createUsedOffer(productId, input as import('./product-contract.js').UsedOfferCreateInput)
+})
+
+const validateProductId = (productId: unknown): number => {
+  if (typeof productId !== 'number' || !Number.isInteger(productId) || productId <= 0) throw new ProductError('validation', 'Invalid LEGO product.')
+  return productId
+}
+
+const validateImageId = (imageId: unknown): number => {
+  if (typeof imageId !== 'number' || !Number.isInteger(imageId) || imageId <= 0) throw new ProductError('validation', 'Invalid product image.')
+  return imageId
 }
 
 const validateCatalogueArtwork = (image: unknown) => {
@@ -58,9 +72,23 @@ const validateCatalogueArtwork = (image: unknown) => {
   return image
 }
 
-ipcMain.handle('admin-products:set-feature', async (_event, listingId: unknown) => productService.setFeatureProduct(validateListingId(listingId)))
-ipcMain.handle('admin-products:upload-catalogue-artwork', async (_event, listingId: unknown, image: unknown) => productService.uploadCatalogueArtwork(validateListingId(listingId), validateCatalogueArtwork(image)))
-ipcMain.handle('admin-products:remove-catalogue-artwork', async (_event, listingId: unknown) => productService.removeCatalogueArtwork(validateListingId(listingId)))
+ipcMain.handle('admin-products:list-product-images', async (_event, productId: unknown) => productService.listProductImages(validateProductId(productId)))
+ipcMain.handle('admin-products:upload-image', async (_event, productId: unknown, image: unknown) => {
+  if (!isImageUploadPayload(image)) throw new ProductError('validation', 'Invalid product image.')
+  return productService.uploadProductImage(validateProductId(productId), image)
+})
+ipcMain.handle('admin-products:reorder-product-images', async (_event, productId: unknown, imageIds: unknown) => {
+  if (!Array.isArray(imageIds) || imageIds.some(imageId => typeof imageId !== 'number' || !Number.isInteger(imageId) || imageId <= 0)) throw new ProductError('validation', 'Invalid product image order.')
+  return productService.reorderProductImages(validateProductId(productId), imageIds as number[])
+})
+ipcMain.handle('admin-products:update-product-image-alt-text', async (_event, productId: unknown, imageId: unknown, altText: unknown) => {
+  if (altText !== null && (typeof altText !== 'string' || altText.length > 300)) throw new ProductError('validation', 'Invalid product image alt text.')
+  return productService.updateProductImageAltText(validateProductId(productId), validateImageId(imageId), altText as string | null)
+})
+ipcMain.handle('admin-products:delete-product-image', async (_event, productId: unknown, imageId: unknown) => productService.deleteProductImage(validateProductId(productId), validateImageId(imageId)))
+ipcMain.handle('admin-products:set-feature', async (_event, productId: unknown) => productService.setFeatureProduct(validateProductId(productId)))
+ipcMain.handle('admin-products:upload-catalogue-artwork', async (_event, productId: unknown, image: unknown) => productService.uploadCatalogueArtwork(validateProductId(productId), validateCatalogueArtwork(image)))
+ipcMain.handle('admin-products:remove-catalogue-artwork', async (_event, productId: unknown) => productService.removeCatalogueArtwork(validateProductId(productId)))
 
 const validateCategoryId = (categoryId: unknown): number => {
   if (typeof categoryId !== 'number' || !Number.isInteger(categoryId) || categoryId <= 0) throw new CategoryError('validation', 'Invalid category.')

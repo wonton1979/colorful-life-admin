@@ -22,6 +22,7 @@ function Purchases() {
   const [historyError, setHistoryError] = useState('')
   const [selectedPurchase, setSelectedPurchase] = useState<Review | null>(null)
   const [detailsLoading, setDetailsLoading] = useState(false)
+  const [openingPurchaseId, setOpeningPurchaseId] = useState<number | null>(null)
   const [detailsError, setDetailsError] = useState('')
   const [manualPurchaseOpen, setManualPurchaseOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -84,6 +85,7 @@ function Purchases() {
 
   const openDetails = async (purchaseId: number) => {
     setDetailsLoading(true)
+    setOpeningPurchaseId(purchaseId)
     setDetailsError('')
     try {
       setSelectedPurchase(await window.adminPurchases.review(purchaseId))
@@ -91,6 +93,7 @@ function Purchases() {
       setDetailsError(messageFor(error))
     } finally {
       setDetailsLoading(false)
+      setOpeningPurchaseId(null)
     }
   }
 
@@ -105,7 +108,7 @@ function Purchases() {
 
   return (
     <section className="purchases-workspace" aria-labelledby="purchases-title">
-      <div className="purchases-heading"><div><p className="eyebrow">OPERATIONS</p><h2 id="purchases-title">Purchases</h2></div><div className="purchase-heading-actions"><button className="button button-primary" type="button" onClick={() => { setManualPurchaseOpen(true) }}>Add Purchase</button><button className="button button-secondary" type="button" onClick={() => void loadHistory()} disabled={historyLoading}>{historyLoading ? 'Loading…' : 'Refresh history'}</button></div></div>
+      <div className="purchases-heading"><div><p className="eyebrow">OPERATIONS</p><h2 id="purchases-title">Purchases</h2></div><div className="purchase-heading-actions"><button className="button button-primary" type="button" onClick={() => { setManualPurchaseOpen(true) }}>Add Purchase</button><button className="button button-secondary" type="button" onClick={() => void loadHistory()} disabled={historyLoading} aria-busy={historyLoading}>{historyLoading ? 'Loading…' : 'Refresh history'}</button></div></div>
       {manualPurchaseOpen && <ManualPurchaseForm onCancel={() => setManualPurchaseOpen(false)} onCreate={createManualPurchase} />}
       <div className="purchase-import-card">
         <p className="eyebrow">PURCHASE IMPORT</p><h3>Import Purchase Document</h3><p className="panel-intro">Upload a purchase document in PDF format. It will be checked and recorded securely.</p>
@@ -117,15 +120,15 @@ function Purchases() {
         {file && <div className="selected-file"><span>{file.name}</span><button type="button" onClick={() => setFile(null)} disabled={importing}>Clear</button></div>}
         {importError && <p className="error-message" role="alert">{importError}</p>}
         {importResult && <p className="success-message" role="status">{importResult.message}</p>}
-        <button className="button button-primary" type="button" onClick={() => void importDocument()} disabled={!file || importing}>{importing ? 'Importing…' : 'Import purchase document'}</button>
+        <button className="button button-primary" type="button" onClick={() => void importDocument()} disabled={!file || importing} aria-busy={importing}>{importing ? 'Importing…' : 'Import purchase document'}</button>
       </div>
-      <div className="purchase-history-card">
+      <div className="purchase-history-card" aria-busy={historyLoading || detailsLoading}>
         <div className="product-panel-heading"><div><p className="eyebrow">HISTORY</p><h3>Purchase History</h3></div><span className="history-count">{historyLoading ? '' : `${purchases.length} shown`}</span></div>
         {historyError && <p className="error-message" role="alert">{historyError}</p>}
         {detailsError && <p className="error-message" role="alert">{detailsError}</p>}
         {historyLoading && <p className="status-message">Loading purchase history…</p>}
         {!historyLoading && !historyError && purchases.length === 0 && <p className="status-message">No purchase documents have been imported yet.</p>}
-        {!historyLoading && purchases.length > 0 && <div className="purchase-list">{purchases.map((purchase) => <article className="purchase-row" key={purchase.id}><div><strong>{purchase.sourceOrderReference}</strong><span>{formatDate(purchase.sourceOrderDate)} · {purchase.purchaseDocuments.length} document{purchase.purchaseDocuments.length === 1 ? '' : 's'}</span></div><button className="button button-secondary" type="button" onClick={() => void openDetails(purchase.id)} disabled={detailsLoading}>{detailsLoading ? 'Opening…' : 'View details'}</button></article>)}</div>}
+        {!historyLoading && purchases.length > 0 && <div className="purchase-list">{purchases.map((purchase) => <article className="purchase-row" key={purchase.id}><div><strong>{purchase.sourceOrderReference}</strong><span>{formatDate(purchase.sourceOrderDate)} · {purchase.purchaseDocuments.length} document{purchase.purchaseDocuments.length === 1 ? '' : 's'}</span></div><button className="button button-secondary" type="button" onClick={() => void openDetails(purchase.id)} disabled={detailsLoading} aria-busy={openingPurchaseId === purchase.id}>{openingPurchaseId === purchase.id ? 'Opening…' : 'View details'}</button></article>)}</div>}
         {totalPages > 1 && <nav className="purchase-pagination" aria-label="Purchase history pages"><button className="button button-secondary" type="button" onClick={() => void loadHistory(page - 1)} disabled={page <= 1 || historyLoading}>Previous</button><span>Page {page} of {totalPages}</span><button className="button button-secondary" type="button" onClick={() => void loadHistory(page + 1)} disabled={page >= totalPages || historyLoading}>Next</button></nav>}
       </div>
     </section>

@@ -11,13 +11,14 @@ export interface CreateProductRequest {
   title: string
   description?: string
   theme: string
-  colorfulLifeCategory: ColorfulLifeCategory
+  categoryId: number
   ageRecommendation: string
   pieceCount: number
   condition: ListingCondition
   originalPrice: number
   salePrice?: number
   currentStock?: number
+  isRetired?: boolean
 }
 
 export interface LegoProduct {
@@ -28,6 +29,11 @@ export interface LegoProduct {
   theme: string
   ageRecommendation: string
   pieceCount: number
+  isRetired: boolean
+  isFeatureProduct: boolean
+  catalogueArtworkUrl: string | null
+  catalogueArtworkPublicId: string | null
+  productImages: ProductImage[]
   createdAt: string
   updatedAt: string
 }
@@ -40,14 +46,14 @@ export interface BackendCategory {
   imageUrl: string | null
 }
 
-export interface ListingImage {
+export interface ProductImage {
   id: number
-  listingId: number
+  legoProductId: number
   url: string
   publicId: string
   altText: string | null
   sortOrder: number
-  createdAt: string
+  createdAt?: string
 }
 
 export interface ProductListing {
@@ -55,9 +61,6 @@ export interface ProductListing {
   legoProductId: number
   colorfulLifeCategory: ColorfulLifeCategory
   category: BackendCategory | null
-  catalogueArtworkUrl: string | null
-  catalogueArtworkPublicId: string | null
-  isFeatureProduct: boolean
   condition: ListingCondition
   originalPrice: string
   salePrice: string | null
@@ -66,7 +69,6 @@ export interface ProductListing {
   createdAt: string
   updatedAt: string
   legoProduct: LegoProduct
-  listingImages: ListingImage[]
 }
 
 export interface ImageUploadPayload {
@@ -91,11 +93,81 @@ export interface ProductCataloguePage {
   }
 }
 
+/** Admin listing rows with shared presentation owned by the nested LegoProduct. */
+export interface AdminProductListing {
+  id: number
+  condition: ListingCondition
+  active: boolean
+  usedLifecycle: 'AVAILABLE' | 'SOLD' | 'RETIRED' | null
+  currentStock: number
+  availableStock: number
+  legoProduct: {
+    id: number
+    setNumber: string
+    title: string
+    category: { id: number; name: string } | null
+    isFeatureProduct: boolean
+    catalogueArtworkUrl: string | null
+    catalogueArtworkPublicId: string | null
+    productImages: ProductImage[]
+  }
+}
+
+export type UsedOfferStatus = 'AVAILABLE' | 'HISTORICAL_ONLY' | 'NONE'
+
+export interface AdminLegoProduct {
+  id: number
+  setNumber: string
+  title: string
+  description: string | null
+  theme: string
+  ageRecommendation: string
+  pieceCount: number
+  category: { id: number; name: string } | null
+  isRetired: boolean
+  usedOfferStatus: UsedOfferStatus
+}
+
+export interface AdminLegoProductPage {
+  items: AdminLegoProduct[]
+  pagination: ProductCataloguePage['pagination']
+}
+
+export interface UsedConditionPhoto {
+  bytes: Uint8Array
+  filename: string
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp'
+}
+
+export interface UsedOfferCreateInput {
+  salePrice: number
+  damageDescription: string
+  conditionPhotos: UsedConditionPhoto[]
+}
+
+export interface UsedOfferCreated {
+  id: number
+  legoProductId: number
+  condition: 'USED_LIKE_NEW'
+  originalPrice: string
+  salePrice: string | null
+  currentStock: 1
+  usedLifecycle: 'AVAILABLE'
+  damageDescription: string
+}
+
 export interface AdminProductsApi {
   createProduct(request: CreateProductRequest): Promise<ProductListing>
   listProducts(): Promise<ProductListing[]>
-  uploadListingImage(listingId: number, image: ImageUploadPayload): Promise<ListingImage>
-  setFeatureProduct(listingId: number): Promise<{ id: number; isFeatureProduct: boolean }>
-  uploadCatalogueArtwork(listingId: number, image: ImageUploadPayload): Promise<CatalogueArtwork>
-  removeCatalogueArtwork(listingId: number): Promise<void>
+  listAdminProductListings(): Promise<AdminProductListing[]>
+  listProductImages(productId: number): Promise<ProductImage[]>
+  uploadProductImage(productId: number, image: ImageUploadPayload): Promise<ProductImage>
+  reorderProductImages(productId: number, imageIds: number[]): Promise<ProductImage[]>
+  updateProductImageAltText(productId: number, imageId: number, altText: string | null): Promise<ProductImage>
+  deleteProductImage(productId: number, imageId: number): Promise<void>
+  setFeatureProduct(productId: number): Promise<{ id: number; isFeatureProduct: boolean }>
+  uploadCatalogueArtwork(productId: number, image: ImageUploadPayload): Promise<CatalogueArtwork>
+  removeCatalogueArtwork(productId: number): Promise<void>
+  searchLegoProducts(query: string, page?: number, pageSize?: number): Promise<AdminLegoProductPage>
+  createUsedOffer(productId: number, input: UsedOfferCreateInput): Promise<UsedOfferCreated>
 }

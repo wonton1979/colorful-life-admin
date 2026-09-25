@@ -5,7 +5,7 @@ import AddProduct from './AddProduct'
 import CataloguePresentation from './CataloguePresentation'
 import Categories from './Categories'
 import Purchases from './Purchases'
-import type { ColorfulLifeCategory, ProductListing } from '../electron/product-contract'
+import type { ProductListing, UsedOfferCreated } from '../electron/product-contract'
 
 type ViewState = 'restoring' | 'signed-out' | 'signed-in'
 
@@ -17,8 +17,9 @@ function App() {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [presentationRefreshToken, setPresentationRefreshToken] = useState(0)
-  const [presentationRefreshCategory, setPresentationRefreshCategory] = useState<ColorfulLifeCategory | null>(null)
+  const [presentationRefreshCategory, setPresentationRefreshCategory] = useState<number | null>(null)
   const [section, setSection] = useState<'products' | 'categories' | 'purchases'>('products')
 
   useEffect(() => {
@@ -53,16 +54,27 @@ function App() {
   }
 
   const handleLogout = async () => {
-    await window.adminAuth.logout()
-    setUser(null)
-    setViewState('signed-out')
-    setEmail('')
-    setPassword('')
-    setError('')
+    if (isLoggingOut) return
+    setIsLoggingOut(true)
+    try {
+      await window.adminAuth.logout()
+      setUser(null)
+      setViewState('signed-out')
+      setEmail('')
+      setPassword('')
+      setError('')
+    } finally {
+      setIsLoggingOut(false)
+    }
   }
 
   const handleProductCreated = (product: ProductListing) => {
-    setPresentationRefreshCategory(product.colorfulLifeCategory)
+    setPresentationRefreshCategory(product.category?.id ?? null)
+    setPresentationRefreshToken((current) => current + 1)
+  }
+
+  const handleUsedOfferCreated = (_offer: UsedOfferCreated, categoryId: number | null) => {
+    setPresentationRefreshCategory(categoryId)
     setPresentationRefreshToken((current) => current + 1)
   }
 
@@ -75,11 +87,11 @@ function App() {
       <main className="shell">
         <header className="shell-header">
           <div><p className="eyebrow">COLORFUL LIFE</p><div className="workspace-title"><h1>Admin workspace</h1><span className="admin-status" aria-label="Administrator access confirmed">✓</span><span className="admin-email">{user.email}</span></div></div>
-          <button className="button button-secondary" type="button" onClick={() => void handleLogout()}>Sign out</button>
+          <button className="button button-secondary" type="button" onClick={() => void handleLogout()} disabled={isLoggingOut} aria-busy={isLoggingOut}>{isLoggingOut ? 'Signing out…' : 'Sign out'}</button>
         </header>
         <nav className="workspace-nav" aria-label="Admin sections"><button className={`button ${section === 'products' ? 'button-primary' : 'button-secondary'}`} type="button" onClick={() => setSection('products')}>Products</button><button className={`button ${section === 'categories' ? 'button-primary' : 'button-secondary'}`} type="button" onClick={() => setSection('categories')}>Categories</button><button className={`button ${section === 'purchases' ? 'button-primary' : 'button-secondary'}`} type="button" onClick={() => setSection('purchases')}>Purchases</button></nav>
         {section === 'categories' ? <Categories /> : section === 'purchases' ? <Purchases /> : <div className="catalogue-workspace">
-          <AddProduct onProductCreated={handleProductCreated} />
+          <AddProduct onProductCreated={handleProductCreated} onUsedOfferCreated={handleUsedOfferCreated} />
           <CataloguePresentation refreshToken={presentationRefreshToken} refreshCategory={presentationRefreshCategory} />
         </div>}
       </main>
@@ -119,7 +131,7 @@ function App() {
               </button>
             </div>
             {error && <p className="error-message" role="alert">{error}</p>}
-            <button className="button button-primary" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Sign in'}</button>
+            <button className="button button-primary" type="submit" disabled={isSubmitting} aria-busy={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Sign in'}</button>
           </form>
         </section>
       </div>
