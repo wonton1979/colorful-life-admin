@@ -12,8 +12,8 @@ beforeEach(() => {
     amend: vi.fn().mockResolvedValue(review()), resolve: vi.fn().mockResolvedValue(review()),
     receive: vi.fn().mockResolvedValue(review()), searchProducts: vi.fn().mockResolvedValue([]), createListing: vi.fn(),
   }
-  window.adminProducts = { createProduct: vi.fn(), listProducts: vi.fn().mockResolvedValue([]), uploadListingImage: vi.fn(),
-    setFeatureProduct: vi.fn(), uploadCatalogueArtwork: vi.fn(), removeCatalogueArtwork: vi.fn() }
+  window.adminProducts = { createProduct: vi.fn(), listProducts: vi.fn().mockResolvedValue([]), listAdminProductListings: vi.fn().mockResolvedValue([]), listProductImages: vi.fn().mockResolvedValue([]), uploadProductImage: vi.fn(), reorderProductImages: vi.fn().mockResolvedValue([]), updateProductImageAltText: vi.fn(), deleteProductImage: vi.fn(),
+    setFeatureProduct: vi.fn(), uploadCatalogueArtwork: vi.fn(), removeCatalogueArtwork: vi.fn(), searchLegoProducts: vi.fn().mockResolvedValue({ items: [], pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 } }), createUsedOffer: vi.fn() }
   window.adminCategories = { list: vi.fn().mockResolvedValue([]), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn() }
   vi.spyOn(window, 'confirm').mockReturnValue(true)
 })
@@ -56,11 +56,14 @@ it("locks submissions while pending and renders authoritative receive response",
   const button = screen.getByRole('button', { name: 'Approve & Receive 3' })
   fireEvent.click(button); fireEvent.click(button)
   expect(button).toBeDisabled()
+  expect(button).toHaveAttribute('aria-busy', 'true')
+  expect(document.querySelector('.purchase-review')).toHaveAttribute('aria-busy', 'true')
   expect(window.adminPurchases.receive).toHaveBeenCalledTimes(1)
   expect(window.adminPurchases.receive).toHaveBeenCalledWith(1, 101, { revision: 'a'.repeat(64) })
   const r = review(); r.groups[0].state = 'RECEIVED'; r.groups[0].canResolve = false; r.groups[0].lines.forEach(l => { l.canAmend = false })
   finish(r)
   expect(await screen.findByText('RECEIVED')).toBeInTheDocument()
+  expect(document.querySelector('.purchase-review')).toHaveAttribute('aria-busy', 'false')
   expect(screen.queryByRole('button', { name: /Approve/ })).not.toBeInTheDocument()
 })
 it("cancelling approval makes no request; backend failure retains actionable review", async () => {
@@ -72,6 +75,9 @@ it("cancelling approval makes no request; backend failure retains actionable rev
   fireEvent.click(screen.getByRole('button', { name: /Approve/ }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Purchase changed')
   expect(screen.getByRole('button', { name: 'Refresh review' })).toBeEnabled()
+  const retryReceive = screen.getByRole('button', { name: /Approve & Receive/ })
+  expect(retryReceive).toBeEnabled()
+  expect(retryReceive).toHaveAttribute('aria-busy', 'false')
 })
 it("resolves a whole group explicitly and preserves the choice on failure", async () => {
   const r = review(); r.groups[0].state = 'UNRESOLVED'; r.groups[0].listing = null

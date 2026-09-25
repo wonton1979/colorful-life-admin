@@ -16,10 +16,17 @@ contextBridge.exposeInMainWorld('adminAuth', adminAuth)
 const adminProducts: AdminProductsApi = {
   createProduct: (request) => ipcRenderer.invoke('admin-products:create', request),
   listProducts: () => ipcRenderer.invoke('admin-products:list'),
-  uploadListingImage: (listingId, image) => ipcRenderer.invoke('admin-products:upload-image', listingId, image),
-  setFeatureProduct: (listingId) => ipcRenderer.invoke('admin-products:set-feature', listingId),
-  uploadCatalogueArtwork: (listingId, image) => ipcRenderer.invoke('admin-products:upload-catalogue-artwork', listingId, image),
-  removeCatalogueArtwork: (listingId) => ipcRenderer.invoke('admin-products:remove-catalogue-artwork', listingId),
+  listAdminProductListings: () => ipcRenderer.invoke('admin-products:list-admin-product-listings'),
+  listProductImages: (productId) => ipcRenderer.invoke('admin-products:list-product-images', productId),
+  uploadProductImage: (productId, image) => ipcRenderer.invoke('admin-products:upload-image', productId, image),
+  reorderProductImages: (productId, imageIds) => ipcRenderer.invoke('admin-products:reorder-product-images', productId, imageIds),
+  updateProductImageAltText: (productId, imageId, altText) => ipcRenderer.invoke('admin-products:update-product-image-alt-text', productId, imageId, altText),
+  deleteProductImage: (productId, imageId) => ipcRenderer.invoke('admin-products:delete-product-image', productId, imageId),
+  setFeatureProduct: (productId) => ipcRenderer.invoke('admin-products:set-feature', productId),
+  uploadCatalogueArtwork: (productId, image) => ipcRenderer.invoke('admin-products:upload-catalogue-artwork', productId, image),
+  removeCatalogueArtwork: (productId) => ipcRenderer.invoke('admin-products:remove-catalogue-artwork', productId),
+  searchLegoProducts: (query, page, pageSize) => ipcRenderer.invoke('admin-products:lookup-lego-products', query, page, pageSize),
+  createUsedOffer: (productId, input) => ipcRenderer.invoke('admin-products:create-used-offer', productId, input),
 }
 
 contextBridge.exposeInMainWorld('adminProducts', adminProducts)

@@ -1,22 +1,33 @@
 import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
-import { colorfulLifeCategoryOptions } from '../electron/product-contract'
-import type { ColorfulLifeCategory, ProductListing } from '../electron/product-contract'
+import type { AdminCategory } from '../electron/category-contract'
+import type { AdminProductListing } from '../electron/product-contract'
+import { normalizeImageFile } from './image-normalization'
 
-const supportedTypes = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const maximumArtworkBytes = 8 * 1024 * 1024
 const itemsPerPage = 3
 
 const getErrorMessage = (error: unknown): string => error instanceof Error ? error.message : 'The catalogue presentation action failed.'
 
+const sortByPresentationCompletion = (listings: AdminProductListing[]): AdminProductListing[] => [...listings].sort((first, second) => {
+  const firstHasArtwork = Boolean(first.legoProduct.catalogueArtworkUrl)
+  const secondHasArtwork = Boolean(second.legoProduct.catalogueArtworkUrl)
+  if (firstHasArtwork !== secondHasArtwork) return firstHasArtwork ? 1 : -1
+  // The Admin feed is ordered by ascending ProductListing ID, so a larger ID is the newest stable row identifier.
+  return second.id - first.id || first.legoProduct.id - second.legoProduct.id
+})
+
 interface CataloguePresentationProps {
   refreshToken?: number
-  refreshCategory?: ColorfulLifeCategory | null
+  refreshCategory?: number | null
 }
 
 function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: CataloguePresentationProps) {
-  const [listings, setListings] = useState<ProductListing[]>([])
-  const [selectedCategory, setSelectedCategory] = useState<ColorfulLifeCategory | ''>('')
+  const [listings, setListings] = useState<AdminProductListing[]>([])
+  const [categories, setCategories] = useState<AdminCategory[]>([])
+  const [categoriesLoading, setCategoriesLoading] = useState(true)
+  const [categoriesError, setCategoriesError] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [hasLoaded, setHasLoaded] = useState(false)
   const [error, setError] = useState('')
@@ -24,18 +35,27 @@ function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: Cat
   const [activeAction, setActiveAction] = useState<string | null>(null)
   const [page, setPage] = useState(1)
 
-  const loadListings = async ({ category = selectedCategory, resetPage = false }: { category?: ColorfulLifeCategory | ''; resetPage?: boolean } = {}) => {
+  useEffect(() => {
+    let cancelled = false
+    void window.adminCategories.list().then(data => { if (!cancelled) setCategories(data) }, loadError => { if (!cancelled) { setCategories([]); setCategoriesError(getErrorMessage(loadError)) } }).finally(() => { if (!cancelled) setCategoriesLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  const selectedCategoryNoLongerExists = !categoriesLoading && !categoriesError && !!selectedCategory && !categories.some(category => String(category.id) === selectedCategory)
+  const activeCategory = selectedCategoryNoLongerExists ? '' : selectedCategory
+
+  const loadListings = async ({ category = activeCategory, resetPage = false }: { category?: string; resetPage?: boolean } = {}) => {
     setIsLoading(true)
     setHasLoaded(false)
     setError('')
     try {
-      const nextListings = await window.adminProducts.listProducts()
+      const nextListings = await window.adminProducts.listAdminProductListings()
       setListings(nextListings)
       setHasLoaded(true)
       if (resetPage) {
         setPage(1)
       } else {
-        const categoryCount = nextListings.filter((listing) => !category || listing.colorfulLifeCategory === category).length
+        const categoryCount = nextListings.filter((listing) => !category || String(listing.legoProduct.category?.id) === category).length
         setPage((current) => Math.min(current, Math.max(1, Math.ceil(categoryCount / itemsPerPage))))
       }
     } catch (loadError) {
@@ -47,30 +67,32 @@ function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: Cat
 
   useEffect(() => {
     void Promise.resolve().then(() => {
-      const category = refreshToken > 0 ? refreshCategory ?? '' : selectedCategory
-      if (refreshToken > 0) {
+      const hasCategoryContext = refreshToken > 0 && refreshCategory !== null
+      const category = hasCategoryContext ? String(refreshCategory) : activeCategory
+      if (hasCategoryContext) {
         setSelectedCategory(category)
         setPage(1)
       }
-      return loadListings({ category, resetPage: refreshToken > 0 })
+      return loadListings({ category, resetPage: hasCategoryContext })
     })
     // The refresh token intentionally controls this effect; category changes are local and do not reload data.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshToken])
 
-  const visibleListings = selectedCategory ? listings.filter((listing) => listing.colorfulLifeCategory === selectedCategory) : listings
+  const orderedListings = sortByPresentationCompletion(listings)
+  const visibleListings = activeCategory ? orderedListings.filter((listing) => String(listing.legoProduct.category?.id) === activeCategory) : orderedListings
   const pageCount = Math.max(1, Math.ceil(visibleListings.length / itemsPerPage))
-  const currentPage = Math.min(page, pageCount)
+  const currentPage = selectedCategoryNoLongerExists ? 1 : Math.min(page, pageCount)
   const paginatedListings = visibleListings.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
-  const setFeature = async (listingId: number) => {
+  const setFeature = async (productId: number) => {
     if (activeAction !== null) return
-    setActiveAction(`feature-${listingId}`)
+    setActiveAction(`feature-${productId}`)
     setError('')
     setFeedback('')
     try {
-      await window.adminProducts.setFeatureProduct(listingId)
-      setListings(await window.adminProducts.listProducts())
+      await window.adminProducts.setFeatureProduct(productId)
+      setListings(await window.adminProducts.listAdminProductListings())
       setFeedback('Feature product updated.')
     } catch (actionError) {
       setError(getErrorMessage(actionError))
@@ -79,27 +101,25 @@ function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: Cat
     }
   }
 
-  const uploadArtwork = async (listingId: number, event: ChangeEvent<HTMLInputElement>) => {
+  const uploadArtwork = async (productId: number, event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    if (!supportedTypes.has(file.type)) {
-      setError(`${file.name} is not a supported image. Use JPEG, PNG, or WebP.`)
-      return
-    }
+    if (file.size === 0) { setError(`${file.name} is empty and cannot be uploaded.`); return }
     if (file.size > maximumArtworkBytes) {
       setError(`${file.name} exceeds the 8 MiB image limit.`)
       return
     }
     if (activeAction !== null) return
-    setActiveAction(`artwork-${listingId}`)
+    setActiveAction(`artwork-${productId}`)
     setError('')
     setFeedback('')
     try {
-      const artwork = await window.adminProducts.uploadCatalogueArtwork(listingId, {
-        bytes: new Uint8Array(await file.arrayBuffer()), filename: file.name, mimeType: file.type as 'image/jpeg' | 'image/png' | 'image/webp',
-      })
-      setListings((current) => current.map((listing) => listing.id === listingId ? { ...listing, catalogueArtworkUrl: artwork.url, catalogueArtworkPublicId: artwork.publicId } : listing))
+      const artwork = await window.adminProducts.uploadCatalogueArtwork(productId, await normalizeImageFile(file))
+      setListings((current) => current.map((listing) => listing.legoProduct.id === productId ? {
+        ...listing,
+        legoProduct: { ...listing.legoProduct, catalogueArtworkUrl: artwork.url, catalogueArtworkPublicId: artwork.publicId },
+      } : listing))
       setFeedback('Catalogue artwork saved.')
     } catch (actionError) {
       setError(getErrorMessage(actionError))
@@ -108,14 +128,17 @@ function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: Cat
     }
   }
 
-  const removeArtwork = async (listingId: number) => {
+  const removeArtwork = async (productId: number) => {
     if (activeAction !== null || !window.confirm('Remove this catalogue artwork?')) return
-    setActiveAction(`remove-artwork-${listingId}`)
+    setActiveAction(`remove-artwork-${productId}`)
     setError('')
     setFeedback('')
     try {
-      await window.adminProducts.removeCatalogueArtwork(listingId)
-      setListings((current) => current.map((listing) => listing.id === listingId ? { ...listing, catalogueArtworkUrl: null, catalogueArtworkPublicId: null } : listing))
+      await window.adminProducts.removeCatalogueArtwork(productId)
+      setListings((current) => current.map((listing) => listing.legoProduct.id === productId ? {
+        ...listing,
+        legoProduct: { ...listing.legoProduct, catalogueArtworkUrl: null, catalogueArtworkPublicId: null },
+      } : listing))
       setFeedback('Catalogue artwork removed.')
     } catch (actionError) {
       setError(getErrorMessage(actionError))
@@ -126,24 +149,29 @@ function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: Cat
 
   return (
     <section className="product-panel catalogue-presentation" aria-labelledby="catalogue-presentation-title">
-      <div className="product-panel-heading"><div><p className="eyebrow">CATALOGUE</p><h2 id="catalogue-presentation-title">Presentation management</h2></div><button className="button button-secondary" type="button" onClick={() => void loadListings()} disabled={isLoading || activeAction !== null}>{isLoading ? 'Loading…' : 'Refresh listings'}</button></div>
-      <p className="panel-intro">Choose one Feature listing per category and manage its separate catalogue artwork.</p>
-      <label className="category-filter">Filter category<select aria-label="Presentation category" value={selectedCategory} onChange={(event) => { setSelectedCategory(event.target.value as ColorfulLifeCategory | ''); setPage(1) }}><option value="">All categories</option>{colorfulLifeCategoryOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <div className="product-panel-heading"><div><p className="eyebrow">CATALOGUE</p><h2 id="catalogue-presentation-title">Presentation management</h2></div><button className="button button-secondary" type="button" onClick={() => void loadListings()} disabled={isLoading || activeAction !== null} aria-busy={isLoading}>{isLoading ? 'Loading…' : 'Refresh listings'}</button></div>
+      <p className="panel-intro">Manage shared product Feature state and catalogue artwork.</p>
+      <label className="category-filter">Filter category<select aria-label="Presentation category" value={activeCategory} onChange={(event) => { setSelectedCategory(event.target.value); setPage(1) }} disabled={categoriesLoading || !!categoriesError}><option value="">All categories</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+      {categoriesLoading && <p className="status-message">Loading categories…</p>}
+      {categoriesError && <p className="error-message" role="alert">Unable to load categories: {categoriesError}</p>}
       {error && <p className="error-message" role="alert">{error}</p>}
       {feedback && <p className="success-message" role="status">{feedback}</p>}
       {isLoading && <p className="status-message">Loading catalogue listings…</p>}
       {!isLoading && hasLoaded && visibleListings.length === 0 && <p className="status-message">No listings found for this category.</p>}
       {!isLoading && visibleListings.length > 0 && <>
         <div className="presentation-list" aria-label="Catalogue presentation listings">{paginatedListings.map((listing) => {
-        const featureAction = activeAction === `feature-${listing.id}`
-        const artworkAction = activeAction === `artwork-${listing.id}`
-        const removeAction = activeAction === `remove-artwork-${listing.id}`
-        return <article className={`presentation-card${listing.isFeatureProduct ? ' presentation-card-feature' : ''}`} key={listing.id}>
-          <div className="presentation-preview">{listing.catalogueArtworkUrl ? <img src={listing.catalogueArtworkUrl} alt={`Catalogue artwork for ${listing.legoProduct.title}`} /> : <span>No catalogue artwork</span>}</div>
-          <div className="presentation-details"><div className="presentation-heading"><div><h3>{listing.legoProduct.title}</h3><p>Listing #{listing.id} · Set {listing.legoProduct.setNumber}</p></div><span className={`presentation-badge${listing.isFeatureProduct ? ' feature-badge' : ''}`}>{listing.isFeatureProduct ? 'Feature' : 'Standard'}</span></div>
-            <p className="presentation-category">{colorfulLifeCategoryOptions.find(([value]) => value === listing.colorfulLifeCategory)?.[1] ?? listing.colorfulLifeCategory}</p>
-            <p className="artwork-state">{listing.catalogueArtworkUrl ? 'Catalogue artwork available' : 'No catalogue artwork'}</p>
-            <div className="presentation-actions"><button className="button button-primary" type="button" onClick={() => void setFeature(listing.id)} disabled={activeAction !== null || listing.isFeatureProduct}>{featureAction ? 'Saving…' : listing.isFeatureProduct ? 'Current Feature' : 'Make Feature'}</button><label className="button button-secondary upload-artwork-button">{artworkAction ? 'Uploading…' : listing.catalogueArtworkUrl ? 'Replace artwork' : 'Upload artwork'}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => void uploadArtwork(listing.id, event)} disabled={activeAction !== null} /></label>{listing.catalogueArtworkUrl && <button className="button button-secondary" type="button" onClick={() => void removeArtwork(listing.id)} disabled={activeAction !== null}>{removeAction ? 'Removing…' : 'Remove artwork'}</button>}</div>
+        const productId = listing.legoProduct.id
+        const featureAction = activeAction === `feature-${productId}`
+        const artworkAction = activeAction === `artwork-${productId}`
+        const removeAction = activeAction === `remove-artwork-${productId}`
+        const artworkUrl = listing.legoProduct.catalogueArtworkUrl
+        const isFeatureProduct = listing.legoProduct.isFeatureProduct
+        return <article className={`presentation-card${isFeatureProduct ? ' presentation-card-feature' : ''}`} key={listing.id}>
+          <div className="presentation-preview">{artworkUrl ? <img src={artworkUrl} alt={`Catalogue artwork for ${listing.legoProduct.title}`} /> : <span>No catalogue artwork</span>}</div>
+          <div className="presentation-details"><div className="presentation-heading"><div><h3>{listing.legoProduct.title}</h3><p>Listing #{listing.id} · Set {listing.legoProduct.setNumber}</p></div><span className={`presentation-badge${isFeatureProduct ? ' feature-badge' : ''}`}>{isFeatureProduct ? 'Feature' : 'Standard'}</span></div>
+            <p className="presentation-category">{listing.legoProduct.category?.name ?? 'Uncategorized'}</p>
+            <p className="artwork-state">{artworkUrl ? 'Catalogue artwork available' : 'No catalogue artwork'}</p>
+            <div className="presentation-actions"><button className="button button-primary" type="button" onClick={() => void setFeature(productId)} disabled={activeAction !== null || isFeatureProduct} aria-busy={featureAction}>{featureAction ? 'Saving…' : isFeatureProduct ? 'Current Feature' : 'Make Feature'}</button><label className="button button-secondary upload-artwork-button" aria-busy={artworkAction}>{artworkAction ? 'Uploading…' : artworkUrl ? 'Replace artwork' : 'Upload artwork'}<input type="file" accept="image/*,.jpg,.jpeg,.png,.webp" onChange={(event) => void uploadArtwork(productId, event)} disabled={activeAction !== null} /></label>{artworkUrl && <button className="button button-secondary" type="button" onClick={() => void removeArtwork(productId)} disabled={activeAction !== null} aria-busy={removeAction}>{removeAction ? 'Removing…' : 'Remove artwork'}</button>}</div>
           </div>
         </article>
         })}</div>

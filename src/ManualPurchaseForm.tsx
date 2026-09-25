@@ -108,7 +108,7 @@ export default function ManualPurchaseForm({ onCancel, onCreate }: { onCancel: (
         <p>Total paid <strong>{totalPence === null ? '—' : `£${pounds(totalPence)}`}</strong></p>
       </div>
       {error && <p className="error-message" role="alert">{error}</p>}
-      <div className="manual-purchase-actions"><button className="button button-secondary" type="button" onClick={onCancel} disabled={submitting}>Cancel</button><button className="button button-primary" type="submit" disabled={submitting}>{submitting ? 'Creating purchase…' : 'Create purchase'}</button></div>
+      <div className="manual-purchase-actions"><button className="button button-secondary" type="button" onClick={onCancel} disabled={submitting}>Cancel</button><button className="button button-primary" type="submit" disabled={submitting} aria-busy={submitting}>{submitting ? 'Creating purchase…' : 'Create purchase'}</button></div>
     </form>
   </section>
 }

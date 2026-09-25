@@ -17,6 +17,7 @@ export default function PurchaseReview({ initialReview, onBack }: { initialRevie
   const [review, setReview] = useState(initialReview)
   const [panel, setPanel] = useState<{ id: number; kind: 'amend' | 'resolve' } | null>(null)
   const [pending, setPending] = useState(false)
+  const [pendingAction, setPendingAction] = useState<string | null>(null)
   const busy = useRef(false)
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
@@ -36,21 +37,21 @@ export default function PurchaseReview({ initialReview, onBack }: { initialRevie
   } | null>(null)
   const purchaseId = review.purchase.id
 
-  const mutate = async (action: () => Promise<Review>, message: string) => {
+  const mutate = async (action: () => Promise<Review>, message: string, actionKey: string) => {
     if (busy.current) return false
-    busy.current = true; setPending(true); setError(''); setFeedback('')
+    busy.current = true; setPending(true); setPendingAction(actionKey); setError(''); setFeedback('')
     try {
       setReview(await action()); setPanel(null); setFeedback(message)
       return true
     } catch (e) { setError(errorMessage(e)); return false }
-    finally { busy.current = false; setPending(false) }
+    finally { busy.current = false; setPending(false); setPendingAction(null) }
   }
   const openResolution = async (group: ReviewGroup) => {
     if (busy.current) return
     const initialQuery = group.listing ? '' : group.sourceSetNumber ?? ''
     setPanel({ id: group.id, kind: 'resolve' }); setSelectedListing(group.listing ? String(group.listing.id) : '')
     setQuery(initialQuery); setProducts([]); setSearchedProducts(false); setError(''); setLoadedListings(false)
-    busy.current = true; setPending(true)
+    busy.current = true; setPending(true); setPendingAction(`load-listings-${group.id}`)
     try {
       const nextListings = await window.adminProducts.listProducts()
       setListings(nextListings); setLoadedListings(true)
@@ -60,18 +61,18 @@ export default function PurchaseReview({ initialReview, onBack }: { initialRevie
       }
     }
     catch (e) { setError(errorMessage(e)) }
-    finally { busy.current = false; setPending(false) }
+    finally { busy.current = false; setPending(false); setPendingAction(null) }
   }
-  const searchProducts = async () => {
+  const searchProducts = async (groupId: number) => {
     if (busy.current || !query.trim()) return
-    busy.current = true; setPending(true); setError(''); setSearchedProducts(false)
+    busy.current = true; setPending(true); setPendingAction(`search-products-${groupId}`); setError(''); setSearchedProducts(false)
     try { setProducts(await window.adminPurchases.searchProducts(purchaseId, query.trim())); setSearchedProducts(true) }
     catch (e) { setError(errorMessage(e)) }
-    finally { busy.current = false; setPending(false) }
+    finally { busy.current = false; setPending(false); setPendingAction(null) }
   }
   const completeCreation = async (listing: ProductListing) => {
     if (!creation || busy.current) return
-    busy.current = true; setPending(true); setError(''); setFeedback('')
+    busy.current = true; setPending(true); setPendingAction('link-created-listing'); setError(''); setFeedback('')
     try {
       const refreshed = await window.adminPurchases.resolve(creation.purchaseId, creation.groupId, {
         revision: creation.revision, productListingId: listing.id,
@@ -79,19 +80,19 @@ export default function PurchaseReview({ initialReview, onBack }: { initialRevie
       setReview(refreshed); setCreation(null); setPanel(null)
       setFeedback('Listing created and linked. Review it before approving receipt into inventory.')
     } catch (e) { setError(errorMessage(e)) }
-    finally { busy.current = false; setPending(false) }
+    finally { busy.current = false; setPending(false); setPendingAction(null) }
   }
-  if (creation) return <section className="purchases-workspace">
+  if (creation) return <section className="purchases-workspace" aria-busy={pending}>
     <button className="button button-secondary" onClick={() => setCreation(null)}>Back to Purchase Review</button>
     {error && <p className="error-message" role="alert">{error}</p>}
     {pending && <p role="status">Linking created listing…</p>}
     <AddProduct purchaseContext={creation} onProductCreated={listing => void completeCreation(listing)} />
   </section>
 
-  return <section className="purchases-workspace purchase-review" aria-labelledby="purchase-review-title">
+  return <section className="purchases-workspace purchase-review" aria-labelledby="purchase-review-title" aria-busy={pending}>
     <div className="review-toolbar">
       <button className="button button-secondary" disabled={pending} onClick={onBack}>← Purchase History</button>
-      <button className="button button-secondary" disabled={pending} onClick={() => void mutate(() => window.adminPurchases.review(purchaseId), 'Review refreshed.')}>Refresh review</button>
+      <button className="button button-secondary" disabled={pending} aria-busy={pendingAction === 'refresh-review'} onClick={() => void mutate(() => window.adminPurchases.review(purchaseId), 'Review refreshed.', 'refresh-review')}>{pendingAction === 'refresh-review' ? 'Refreshing…' : 'Refresh review'}</button>
     </div>
     <p className="eyebrow">PURCHASE REVIEW</p>
     <h2 id="purchase-review-title">{review.purchase.sourceOrderReference}</h2>
@@ -112,16 +113,16 @@ export default function PurchaseReview({ initialReview, onBack }: { initialRevie
       {group.pendingQuantity !== group.quantity && group.pendingQuantity > 0 && <p>{group.quantity - group.pendingQuantity} already received; {group.pendingQuantity} remaining.</p>}
       <div className="review-actions">
         {group.lines.some(l => l.canAmend) && <button className="button button-secondary" disabled={pending} onClick={() => { setPanel({ id: group.id, kind: 'amend' }); setError('') }}>Amend</button>}
-        {group.canResolve && <button className="button button-secondary" disabled={pending} onClick={() => void openResolution(group)}>{group.listing ? 'Change Listing' : 'Resolve Listing'}</button>}
+        {group.canResolve && <button className="button button-secondary" disabled={pending} aria-busy={pendingAction === `load-listings-${group.id}`} onClick={() => void openResolution(group)}>{pendingAction === `load-listings-${group.id}` ? 'Loading listings…' : group.listing ? 'Change Listing' : 'Resolve Listing'}</button>}
         {group.state === 'MATCHED' && group.listing?.active && <button className="button button-primary" disabled={pending} onClick={() => {
           if (window.confirm(`Approve and receive ${group.pendingQuantity} units into ${group.listing?.condition} / ${group.listing?.setNumber}? This cannot be amended afterward.`))
-            void mutate(() => window.adminPurchases.receive(purchaseId, group.id, { revision: review.revision }), 'Purchase item received into inventory.')
-        }}>Approve &amp; Receive {group.pendingQuantity}</button>}
+            void mutate(() => window.adminPurchases.receive(purchaseId, group.id, { revision: review.revision }), 'Purchase item received into inventory.', `receive-${group.id}`)
+        }} aria-busy={pendingAction === `receive-${group.id}`}>{pendingAction === `receive-${group.id}` ? 'Receiving…' : <>Approve &amp; Receive {group.pendingQuantity}</>}</button>}
       </div>
       {panel?.id === group.id && panel.kind === 'amend' && <div className="review-editor">
         <p>Amend individual source lines. Quantity and price changes recalculate this document’s allocations and total; shipping and discount stay unchanged.</p>
-        {group.lines.map(line => <LineAmend key={line.id + review.revision} line={line} pending={pending} onSave={input =>
-          mutate(() => window.adminPurchases.amend(purchaseId, line.id, { ...input, revision: review.revision }), 'Source line amended; costs recalculated where required.')} />)}
+        {group.lines.map(line => <LineAmend key={line.id + review.revision} line={line} pending={pending} actionPending={pendingAction === `amend-${line.id}`} onSave={input =>
+          mutate(() => window.adminPurchases.amend(purchaseId, line.id, { ...input, revision: review.revision }), 'Source line amended; costs recalculated where required.', `amend-${line.id}`)} />)}
         <button className="button button-secondary" disabled={pending} onClick={() => setPanel(null)}>Cancel amendment</button>
       </div>}
       {panel?.id === group.id && panel.kind === 'resolve' && <div className="review-editor">
@@ -132,11 +133,11 @@ export default function PurchaseReview({ initialReview, onBack }: { initialRevie
             {listingMatches(listings, query).map(l =>
               <option key={l.id} value={l.id}>{l.condition} / {l.legoProduct.setNumber} · {l.legoProduct.title}</option>)}
           </select></label>
-          <button className="button button-primary" disabled={pending} onClick={() => void mutate(() => window.adminPurchases.resolve(purchaseId, group.id, {
+          <button className="button button-primary" disabled={pending} aria-busy={pendingAction === `resolve-${group.id}`} onClick={() => void mutate(() => window.adminPurchases.resolve(purchaseId, group.id, {
             revision: review.revision, productListingId: selectedListing ? Number(selectedListing) : null,
-          }), 'Listing association saved for all source lines.')}>Link selected listing</button>
+          }), 'Listing association saved for all source lines.', `resolve-${group.id}`)}>{pendingAction === `resolve-${group.id}` ? 'Linking…' : 'Link selected listing'}</button>
         </>}
-        <button className="button button-secondary" disabled={pending || !query.trim()} onClick={() => void searchProducts()}>Create listing for existing product</button>
+        <button className="button button-secondary" disabled={pending || !query.trim()} aria-busy={pendingAction === `search-products-${group.id}`} onClick={() => void searchProducts(group.id)}>{pendingAction === `search-products-${group.id}` ? 'Searching products…' : 'Create listing for existing product'}</button>
         {searchedProducts && <p>{products.length ? 'Select the product for which to create a listing. Up to 50 results; refine the search if needed.' : 'No products found.'}</p>}
         {products.map(p => <button className="button button-secondary" key={p.id} disabled={pending} onClick={() => setCreation({ purchaseId, groupId: group.id, revision: review.revision, sourceSetNumber: group.sourceSetNumber, sourceDescription: group.description, existingProduct: p })}>Create listing for {p.setNumber} · {p.title}</button>)}
         <button className="button button-secondary" disabled={pending} onClick={() => setCreation({ purchaseId, groupId: group.id, revision: review.revision, sourceSetNumber: group.sourceSetNumber, sourceDescription: group.description })}>Create new product + listing</button>
@@ -160,7 +161,7 @@ export default function PurchaseReview({ initialReview, onBack }: { initialRevie
   </section>
 }
 
-function LineAmend({ line, pending, onSave }: { line: ReviewLine; pending: boolean; onSave: (input: Omit<PurchaseAmendment, 'revision'>) => Promise<boolean> }) {
+function LineAmend({ line, pending, actionPending, onSave }: { line: ReviewLine; pending: boolean; actionPending: boolean; onSave: (input: Omit<PurchaseAmendment, 'revision'>) => Promise<boolean> }) {
   const [description, setDescription] = useState(line.sourceDescription)
   const [setNumber, setSetNumber] = useState(line.sourceSetNumber ?? '')
   const [quantity, setQuantity] = useState(String(line.quantity))
@@ -177,6 +178,6 @@ function LineAmend({ line, pending, onSave }: { line: ReviewLine; pending: boole
     <label>Quantity<input type="number" min="1" max="1000000" step="1" value={quantity} onChange={e => setQuantity(e.target.value)} required disabled={pending || !line.canAmendCost} /></label>
     <label>Original unit purchase cost<input type="number" min="0" step="0.01" value={cost} onChange={e => setCost(e.target.value)} required disabled={pending || !line.canAmendCost} /></label>
     {!line.canAmendCost && <p>Quantity and price are read-only because this document has received stock or the source line total differs from quantity × unit price.</p>}
-    <button className="button button-primary" disabled={pending}>Save source line</button>
+    <button className="button button-primary" disabled={pending} aria-busy={actionPending}>{actionPending ? 'Saving…' : 'Save source line'}</button>
   </form>
 }
