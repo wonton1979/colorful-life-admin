@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AuthService } from '../electron/auth-service.js'
-import { isImageUploadPayload, ProductError, ProductService } from '../electron/product-service.js'
+import { isImageUploadPayload, isProductMetadataUpdate, ProductError, ProductService } from '../electron/product-service.js'
 import { normalizeImageUploadBytes } from './image-normalization.js'
 
 const productBody = {
@@ -10,6 +10,11 @@ const productBody = {
 }
 
 const imageBody = { image: { id: 1, legoProductId: 456, url: 'https://res.cloudinary.com/example/image/upload/image.jpg', publicId: 'colorful-life/products/456-example', altText: 'Cover', sortOrder: 0, createdAt: '2026-01-01' } }
+const updatedLegoProductBody = {
+  id: 456, setNumber: '60325', title: 'Updated Example Set', description: 'A shorter description', theme: 'City', ageRecommendation: '6+', pieceCount: 240, isRetired: true,
+  categoryId: 29, category: { id: 29, name: 'Juniors', subtitle: null, description: null, imageUrl: null },
+  productImages: [{ id: 9, url: 'https://cdn.example/product-image.jpg', publicId: 'product-image-9', altText: 'Box front', sortOrder: 0 }],
+}
 const bytesFromHex = (hex: string) => Uint8Array.from(hex.match(/.{2}/g) ?? [], byte => Number.parseInt(byte, 16))
 const pngBytes = bytesFromHex('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000000020001e221bc330000000049454e44ae426082')
 const jpegBytes = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0xff, 0xd9])
@@ -21,6 +26,26 @@ const ipcCloneWithSurroundingBytes = (bytes: Uint8Array, offset: number) => {
 }
 
 describe('ProductService', () => {
+  it('updates shared LegoProduct metadata by product ID and parses category and ordered images', async () => {
+    const authenticatedFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(updatedLegoProductBody)))
+    const service = new ProductService({ authenticatedFetch } as unknown as AuthService)
+    const update = { title: 'Updated Example Set', categoryId: 29, isRetired: true }
+
+    const result = await service.updateProductMetadata(456, update)
+
+    expect(authenticatedFetch).toHaveBeenCalledWith('/admin/products/456', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(update),
+    })
+    expect(result).toMatchObject({ id: 456, title: 'Updated Example Set', categoryId: 29, category: { id: 29, name: 'Juniors' } })
+    expect(result.productImages).toEqual([{ id: 9, legoProductId: 456, url: 'https://cdn.example/product-image.jpg', publicId: 'product-image-9', altText: 'Box front', sortOrder: 0 }])
+  })
+
+  it('surfaces Admin metadata validation and duplicate set-number responses', async () => {
+    const authenticatedFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'setNumber already exists' }), { status: 409 }))
+    const service = new ProductService({ authenticatedFetch } as unknown as AuthService)
+    await expect(service.updateProductMetadata(456, { title: 'Updated title' })).rejects.toMatchObject({ code: 'conflict', status: 409, message: 'setNumber already exists' } satisfies Partial<ProductError>)
+  })
+
   it('sends the backend product JSON contract and parses the created listing', async () => {
     const authenticatedFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(productBody), { status: 201 }))
     const service = new ProductService({ authenticatedFetch } as unknown as AuthService)
@@ -253,5 +278,19 @@ describe('ProductService', () => {
     ])
     expect(JSON.parse((authenticatedFetch.mock.calls[1][1] as RequestInit).body as string)).toEqual({ imageIds: [9] })
     expect(JSON.parse((authenticatedFetch.mock.calls[2][1] as RequestInit).body as string)).toEqual({ altText: 'Box front' })
+  })
+})
+
+describe('Product metadata update validation', () => {
+  it('accepts valid non-empty partial updates while rejecting empty, unknown, or invalid fields', () => {
+    expect(isProductMetadataUpdate({ title: 'A corrected title' })).toBe(true)
+    expect(isProductMetadataUpdate({ description: '' })).toBe(true)
+    expect(isProductMetadataUpdate({ categoryId: 29, pieceCount: 240, isRetired: true })).toBe(true)
+    expect(isProductMetadataUpdate({})).toBe(false)
+    expect(isProductMetadataUpdate({ title: '  ' })).toBe(false)
+    expect(isProductMetadataUpdate({ pieceCount: 2.5 })).toBe(false)
+    expect(isProductMetadataUpdate({ categoryId: 0 })).toBe(false)
+    expect(isProductMetadataUpdate({ isRetired: 'true' })).toBe(false)
+    expect(isProductMetadataUpdate({ currentStock: 1 })).toBe(false)
   })
 })

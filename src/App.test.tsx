@@ -17,6 +17,7 @@ describe('App authentication flow', () => {
       createProduct: vi.fn(),
       listProducts: vi.fn().mockResolvedValue([]),
       listAdminProductListings: vi.fn().mockResolvedValue([]),
+      updateProductMetadata: vi.fn(),
       listProductImages: vi.fn().mockResolvedValue([]),
       uploadProductImage: vi.fn(),
       reorderProductImages: vi.fn().mockResolvedValue([]),
@@ -101,6 +102,15 @@ describe('App authentication flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: /sign in to continue/i })).toBeTruthy())
     expect(window.adminAuth.logout).toHaveBeenCalled()
+  })
+
+  it('opens the shared product editing workflow from the Admin navigation', async () => {
+    window.adminAuth.restore = vi.fn().mockResolvedValue(admin)
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Admin workspace' })
+    fireEvent.click(screen.getByRole('button', { name: 'Edit products' }))
+    expect(await screen.findByRole('heading', { name: 'Edit existing product' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Set number or product title')).toBeInTheDocument()
   })
 
   it('marks only an in-flight logout as busy', async () => {

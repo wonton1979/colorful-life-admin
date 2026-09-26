@@ -15,7 +15,7 @@ if (!preloadSource.includes("contextBridge.exposeInMainWorld('adminAuth'")) {
 if (preloadSource.includes("exposeInMainWorld('electron'") || preloadSource.includes("exposeInMainWorld('ipcRenderer'")) {
   throw new Error('The preload must not expose raw Electron objects.')
 }
-if (JSON.stringify(channels) !== JSON.stringify(['admin-auth:login', 'admin-auth:restore', 'admin-auth:logout', 'admin-products:create', 'admin-products:list', 'admin-products:list-admin-product-listings', 'admin-products:list-product-images', 'admin-products:upload-image', 'admin-products:reorder-product-images', 'admin-products:update-product-image-alt-text', 'admin-products:delete-product-image', 'admin-products:set-feature', 'admin-products:upload-catalogue-artwork', 'admin-products:remove-catalogue-artwork', 'admin-products:lookup-lego-products', 'admin-products:create-used-offer', 'admin-categories:list', 'admin-categories:create', 'admin-categories:update', 'admin-categories:upload-artwork', 'admin-categories:remove-artwork', 'admin-purchases:create-manual', 'admin-purchases:review', 'admin-purchases:amend', 'admin-purchases:resolve', 'admin-purchases:receive', 'admin-purchases:search-products', 'admin-purchases:create-listing', 'admin-purchases:import-pdf', 'admin-purchases:list', 'admin-purchases:get'])) {
+if (JSON.stringify(channels) !== JSON.stringify(['admin-auth:login', 'admin-auth:restore', 'admin-auth:logout', 'admin-products:create', 'admin-products:list', 'admin-products:list-admin-product-listings', 'admin-products:update-metadata', 'admin-products:list-product-images', 'admin-products:upload-image', 'admin-products:reorder-product-images', 'admin-products:update-product-image-alt-text', 'admin-products:delete-product-image', 'admin-products:set-feature', 'admin-products:upload-catalogue-artwork', 'admin-products:remove-catalogue-artwork', 'admin-products:lookup-lego-products', 'admin-products:create-used-offer', 'admin-categories:list', 'admin-categories:create', 'admin-categories:update', 'admin-categories:upload-artwork', 'admin-categories:remove-artwork', 'admin-purchases:create-manual', 'admin-purchases:review', 'admin-purchases:amend', 'admin-purchases:resolve', 'admin-purchases:receive', 'admin-purchases:search-products', 'admin-purchases:create-listing', 'admin-purchases:import-pdf', 'admin-purchases:list', 'admin-purchases:get'])) {
   throw new Error(`Unexpected exposed IPC channels: ${channels.join(', ')}`)
 }
 if (!mainSource.includes('contextIsolation: true') || !mainSource.includes('nodeIntegration: false')) {
@@ -55,7 +55,7 @@ for (const channel of ['admin-purchases:create-manual', 'admin-purchases:review'
     throw new Error(`The compiled main process must register ${channel}.`)
   }
 }
-for (const channel of ['admin-products:list-admin-product-listings', 'admin-products:lookup-lego-products', 'admin-products:create-used-offer']) {
+for (const channel of ['admin-products:list-admin-product-listings', 'admin-products:update-metadata', 'admin-products:lookup-lego-products', 'admin-products:create-used-offer']) {
   if (!preloadSource.includes(channel) || !mainSource.includes(`ipcMain.handle('${channel}'`)) {
     throw new Error(`The source Electron boundary must register ${channel}.`)
   }

@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { AuthError, AuthService } from './auth-service.js'
 import type { LoginCredentials } from './auth-contract.js'
-import { isCreateProductRequest, isImageUploadPayload, ProductError, ProductService } from './product-service.js'
+import { isCreateProductRequest, isImageUploadPayload, isProductMetadataUpdate, ProductError, ProductService } from './product-service.js'
 import { CategoryError, CategoryService, validateCategoryCreate } from './category-service.js'
 import { PurchaseError, PurchaseService, validateAmendment, validateReceipt, validateResolution, validateListingCreation } from './purchase-service.js'
 import type { ManualPurchaseInput } from './purchase-contract.js'
@@ -42,6 +42,10 @@ ipcMain.handle('admin-products:create', async (_event, request: unknown) => {
 
 ipcMain.handle('admin-products:list', () => productService.listProducts())
 ipcMain.handle('admin-products:list-admin-product-listings', () => productService.listAdminProductListings())
+ipcMain.handle('admin-products:update-metadata', async (_event, productId: unknown, update: unknown) => {
+  if (!isProductMetadataUpdate(update)) throw new ProductError('validation', 'Enter valid product details to update.')
+  return productService.updateProductMetadata(validateProductId(productId), update)
+})
 
 ipcMain.handle('admin-products:lookup-lego-products', async (_event, query: unknown, page: unknown = 1, pageSize: unknown = 20) => {
   if (typeof query !== 'string' || query.trim().length < 1 || query.trim().length > 100 || typeof page !== 'number' || !Number.isInteger(page) || page < 1 || page > 10000 || typeof pageSize !== 'number' || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) {

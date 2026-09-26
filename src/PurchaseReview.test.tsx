@@ -12,7 +12,7 @@ beforeEach(() => {
     amend: vi.fn().mockResolvedValue(review()), resolve: vi.fn().mockResolvedValue(review()),
     receive: vi.fn().mockResolvedValue(review()), searchProducts: vi.fn().mockResolvedValue([]), createListing: vi.fn(),
   }
-  window.adminProducts = { createProduct: vi.fn(), listProducts: vi.fn().mockResolvedValue([]), listAdminProductListings: vi.fn().mockResolvedValue([]), listProductImages: vi.fn().mockResolvedValue([]), uploadProductImage: vi.fn(), reorderProductImages: vi.fn().mockResolvedValue([]), updateProductImageAltText: vi.fn(), deleteProductImage: vi.fn(),
+  window.adminProducts = { createProduct: vi.fn(), listProducts: vi.fn().mockResolvedValue([]), listAdminProductListings: vi.fn().mockResolvedValue([]), updateProductMetadata: vi.fn(), listProductImages: vi.fn().mockResolvedValue([]), uploadProductImage: vi.fn(), reorderProductImages: vi.fn().mockResolvedValue([]), updateProductImageAltText: vi.fn(), deleteProductImage: vi.fn(),
     setFeatureProduct: vi.fn(), uploadCatalogueArtwork: vi.fn(), removeCatalogueArtwork: vi.fn(), searchLegoProducts: vi.fn().mockResolvedValue({ items: [], pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 } }), createUsedOffer: vi.fn() }
   window.adminCategories = { list: vi.fn().mockResolvedValue([]), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn() }
   vi.spyOn(window, 'confirm').mockReturnValue(true)
