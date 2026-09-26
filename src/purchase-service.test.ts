@@ -35,4 +35,13 @@ describe('PurchaseService', () => {
     await expect(service.importPdf({ bytes: new Uint8Array([1]), filename: 'invoice.pdf', mimeType: 'application/pdf' })).rejects.toMatchObject({ code: 'duplicate', status: 409 } satisfies Partial<PurchaseError>)
     await expect(service.list()).rejects.toMatchObject({ code: 'server', status: 500 } satisfies Partial<PurchaseError>)
   })
+
+  it('keeps FORBIDDEN and INTERNAL_SERVER_ERROR distinct in service errors', async () => {
+    const authenticatedFetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'FORBIDDEN', message: 'Not permitted' } }), { status: 403 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'INTERNAL_SERVER_ERROR', message: 'Internal server error' } }), { status: 500 }))
+    const service = new PurchaseService({ authenticatedFetch } as unknown as AuthService)
+    await expect(service.list()).rejects.toMatchObject({ code: 'forbidden', backendCode: 'FORBIDDEN', status: 403 } satisfies Partial<PurchaseError>)
+    await expect(service.list()).rejects.toMatchObject({ code: 'server', backendCode: 'INTERNAL_SERVER_ERROR', status: 500 } satisfies Partial<PurchaseError>)
+  })
 })

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import type { AdminCategory } from '../electron/category-contract'
 import type { AdminLegoProduct, ImageUploadPayload, ProductImage, ProductMetadataUpdate } from '../electron/product-contract'
+import { adminCategories, adminProducts } from './admin-api'
 import { normalizeImageFile } from './image-normalization'
 import './ProductEditor.css'
 
@@ -75,7 +76,7 @@ function ProductEditor() {
 
   useEffect(() => {
     let cancelled = false
-    void Promise.resolve().then(() => window.adminCategories.list()).then(
+    void Promise.resolve().then(() => adminCategories.list()).then(
       result => { if (!cancelled) setCategories(result) },
       error => { if (!cancelled) { setCategories([]); setCategoriesError(getErrorMessage(error)) } },
     ).finally(() => { if (!cancelled) setCategoriesLoading(false) })
@@ -85,7 +86,7 @@ function ProductEditor() {
   useEffect(() => {
     if (selectedProductId === undefined) return
     let cancelled = false
-    void Promise.resolve().then(() => window.adminProducts.listProductImages(selectedProductId)).then(
+    void Promise.resolve().then(() => adminProducts.listProductImages(selectedProductId)).then(
       result => { if (!cancelled) setImages(orderedImages(result)) },
       error => { if (!cancelled) { setImages([]); setImagesError(getErrorMessage(error)) } },
     ).finally(() => { if (!cancelled) setImagesLoading(false) })
@@ -124,7 +125,7 @@ function ProductEditor() {
     setHasSearched(false)
     setSearchError('')
     try {
-      const result = await window.adminProducts.searchLegoProducts(searchTerm)
+      const result = await adminProducts.searchLegoProducts(searchTerm)
       setSearchResults(result.items)
       setHasSearched(true)
     } catch (error) {
@@ -156,7 +157,7 @@ function ProductEditor() {
     setSaveMessage('')
     setSaveError('')
     try {
-      const updated = await window.adminProducts.updateProductMetadata(selectedProduct.id, changes)
+      const updated = await adminProducts.updateProductMetadata(selectedProduct.id, changes)
       const nextProduct: AdminLegoProduct = {
         ...selectedProduct,
         setNumber: updated.setNumber,
@@ -183,7 +184,7 @@ function ProductEditor() {
 
   const refreshImages = async (productId: number) => {
     try {
-      const current = await window.adminProducts.listProductImages(productId)
+      const current = await adminProducts.listProductImages(productId)
       setImages(orderedImages(current))
       setImagesError('')
     } catch (error) {
@@ -216,7 +217,7 @@ function ProductEditor() {
     try {
       for (const file of validFiles) {
         const payload = await normalizeImageFile(file)
-        const uploaded = await window.adminProducts.uploadProductImage(selectedProduct.id, payload)
+        const uploaded = await adminProducts.uploadProductImage(selectedProduct.id, payload)
         setImages(current => orderedImages([...current, uploaded]))
         uploadedCount += 1
       }
@@ -236,7 +237,7 @@ function ProductEditor() {
     setImageError('')
     setImageMessage('')
     try {
-      await window.adminProducts.deleteProductImage(selectedProduct.id, image.id)
+      await adminProducts.deleteProductImage(selectedProduct.id, image.id)
       await refreshImages(selectedProduct.id)
       setImageMessage('Product image removed.')
     } catch (error) {
@@ -264,11 +265,11 @@ function ProductEditor() {
         : `Upload a replacement for product image ${image.sortOrder + 1}, then remove the current image?`
       if (!window.confirm(confirmation)) return
       if (deleteFirst) {
-        await window.adminProducts.deleteProductImage(selectedProduct.id, image.id)
+        await adminProducts.deleteProductImage(selectedProduct.id, image.id)
         setImages(current => orderedImages(current.filter(entry => entry.id !== image.id)))
       }
-      await window.adminProducts.uploadProductImage(selectedProduct.id, payload)
-      if (!deleteFirst) await window.adminProducts.deleteProductImage(selectedProduct.id, image.id)
+      await adminProducts.uploadProductImage(selectedProduct.id, payload)
+      if (!deleteFirst) await adminProducts.deleteProductImage(selectedProduct.id, image.id)
       await refreshImages(selectedProduct.id)
       setImageMessage('Product image replaced.')
     } catch (error) {
@@ -291,7 +292,7 @@ function ProductEditor() {
     setImageError('')
     setImageMessage('')
     try {
-      const result = await window.adminProducts.reorderProductImages(selectedProduct.id, reordered.map(image => image.id))
+      const result = await adminProducts.reorderProductImages(selectedProduct.id, reordered.map(image => image.id))
       setImages(orderedImages(result))
       setImageMessage('Product image order saved.')
     } catch (error) {

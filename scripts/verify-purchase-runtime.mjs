@@ -19,7 +19,12 @@ const server = createServer(async (req, res) => {
   const body = text ? JSON.parse(text) : undefined
   requests.push({ path: req.url, method: req.method, body, auth: req.headers.authorization })
   let data
-  if (req.url === '/auth/login') data = { token: 'disposable-runtime-token' }
+  if (req.url === '/auth/login') data = {
+    token: 'disposable-runtime-token',
+    accessTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    refreshToken: 'disposable-runtime-refresh-token',
+    refreshExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  }
   else if (req.url === '/profile') data = { id: 1, email: 'runtime@test.invalid', role: 'ADMIN', createdAt: '2026-09-21', updatedAt: '2026-09-21' }
   else if (req.url.startsWith('/products?')) data = { items: [], pagination: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 } }
   else if (req.url === '/admin/categories') data = []

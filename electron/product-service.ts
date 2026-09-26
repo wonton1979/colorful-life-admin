@@ -1,4 +1,5 @@
 import type { AuthService } from './auth-service.js'
+import { readBackendError } from './backend-error.js'
 import { colorfulLifeCategoryOptions } from './product-contract.js'
 import type { AdminLegoProduct, AdminLegoProductDetails, AdminLegoProductPage, AdminProductListing, BackendCategory, CatalogueArtwork, ColorfulLifeCategory, CreateProductRequest, ImageUploadPayload, ProductCataloguePage, ProductImage, ProductListing, ProductMetadataUpdate, UsedOfferCreateInput, UsedOfferCreated, UsedOfferStatus } from './product-contract.js'
 
@@ -7,12 +8,14 @@ export type ProductErrorCode = 'validation' | 'conflict' | 'not-found' | 'limit'
 export class ProductError extends Error {
   readonly code: ProductErrorCode
   readonly status: number | null
+  readonly backendCode: string | null
 
-  constructor(code: ProductErrorCode, message: string, status: number | null = null) {
+  constructor(code: ProductErrorCode, message: string, status: number | null = null, backendCode: string | null = null) {
     super(message)
     this.name = 'ProductError'
     this.code = code
     this.status = status
+    this.backendCode = backendCode
   }
 }
 
@@ -35,24 +38,15 @@ const categoryEnum = (category: BackendCategory | null): ColorfulLifeCategory | 
   return colorfulLifeCategoryOptions.find(([, label]) => label.replace(/[^a-z0-9]/gi, '').toLowerCase() === normalizedName)?.[0] ?? null
 }
 
-const errorMessage = async (response: Response, fallback: string): Promise<string> => {
-  try {
-    const body: unknown = await response.json()
-    if (isRecord(body) && isString(body.error)) return body.error
-  } catch {
-    // Use the safe operation-specific fallback below.
-  }
-  return fallback
-}
-
 const errorForResponse = async (response: Response, operation: 'create' | 'update' | 'upload' | 'catalogue' | 'feature' | 'list' | 'lookup' | 'used'): Promise<ProductError> => {
-  const message = await errorMessage(response, 'The Colorful Life service could not complete this request.')
-  if (response.status === 403) return new ProductError('forbidden', 'This account cannot manage products.', response.status)
-  if (response.status === 404) return new ProductError('not-found', operation === 'upload' || operation === 'catalogue' || operation === 'feature' ? 'The LEGO product could not be found.' : message, response.status)
-  if (response.status === 409) return new ProductError(operation === 'upload' ? 'limit' : 'conflict', message, response.status)
-  if (response.status === 400) return new ProductError('validation', message, response.status)
-  if (response.status >= 500) return new ProductError('server', 'The Colorful Life service is unavailable right now.', response.status)
-  return new ProductError('server', message, response.status)
+  const details = await readBackendError(response, 'The Colorful Life service could not complete this request.')
+  const { message, code } = details
+  if (response.status === 403 || code === 'FORBIDDEN') return new ProductError('forbidden', 'This account cannot manage products.', response.status, code)
+  if (response.status === 404) return new ProductError('not-found', operation === 'upload' || operation === 'catalogue' || operation === 'feature' ? 'The LEGO product could not be found.' : message, response.status, code)
+  if (response.status === 409) return new ProductError(operation === 'upload' ? 'limit' : 'conflict', message, response.status, code)
+  if (response.status === 400) return new ProductError('validation', message, response.status, code)
+  if (response.status >= 500 || code === 'INTERNAL_SERVER_ERROR') return new ProductError('server', 'The Colorful Life service is unavailable right now.', response.status, code)
+  return new ProductError('server', message, response.status, code)
 }
 
 const parseProductImage = (value: unknown, productId?: number): ProductImage => {

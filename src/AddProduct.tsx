@@ -3,6 +3,7 @@ import type { AdminCategory } from '../electron/category-contract'
 import type { ReviewProduct } from '../electron/purchase-contract'
 import type { FormEvent, ChangeEvent } from 'react'
 import type { AdminLegoProduct, CreateProductRequest, ProductImage, ProductListing, UsedOfferCreated } from '../electron/product-contract'
+import { adminCategories, adminProducts, adminPurchases } from './admin-api'
 import { normalizeImageFile } from './image-normalization'
 
 type ImageStatus = 'pending' | 'uploading' | 'uploaded' | 'failed'
@@ -83,7 +84,7 @@ function AddProduct({ onProductCreated, onUsedOfferCreated, purchaseContext }: A
     let cancelled = false
     setCategoriesLoading(true)
     setCategoriesError('')
-    void window.adminCategories.list().then(data => { if (!cancelled) setCategories(data) }, error => { if (!cancelled) { setCategories([]); setCategoriesError(getErrorMessage(error)) } }).finally(() => { if (!cancelled) setCategoriesLoading(false) })
+    void adminCategories.list().then(data => { if (!cancelled) setCategories(data) }, error => { if (!cancelled) { setCategories([]); setCategoriesError(getErrorMessage(error)) } }).finally(() => { if (!cancelled) setCategoriesLoading(false) })
     return () => { cancelled = true }
   }, [])
 
@@ -137,7 +138,7 @@ function AddProduct({ onProductCreated, onUsedOfferCreated, purchaseContext }: A
     if (!image) return
     setImages((current) => current.map((entry, index) => index === imageIndex ? { ...entry, status: 'uploading', error: undefined } : entry))
     try {
-      const result = await window.adminProducts.uploadProductImage(productId, {
+      const result = await adminProducts.uploadProductImage(productId, {
         ...await normalizeImageFile(image.file),
         ...(image.altText ? { altText: image.altText } : {}),
       })
@@ -160,7 +161,7 @@ function AddProduct({ onProductCreated, onUsedOfferCreated, purchaseContext }: A
       setIsCreating(true)
       try {
         const photoPayloads = await Promise.all(conditionPhotos.map(({ file }) => normalizeImageFile(file)))
-        const offer = await window.adminProducts.createUsedOffer(selectedLegoProduct.id, {
+        const offer = await adminProducts.createUsedOffer(selectedLegoProduct.id, {
           salePrice: price,
           damageDescription: damageDescription.trim(),
           conditionPhotos: photoPayloads,
@@ -179,13 +180,13 @@ function AddProduct({ onProductCreated, onUsedOfferCreated, purchaseContext }: A
         ...(description ? { description } : {}), ...(salePrice ? { salePrice: Number(salePrice) } : {}), ...(currentStock ? { currentStock: Number(currentStock) } : {}),
       }
       const product = purchaseContext
-        ? await window.adminPurchases.createListing(purchaseContext.purchaseId, {
+        ? await adminPurchases.createListing(purchaseContext.purchaseId, {
           ...(purchaseContext.existingProduct ? { existingProductId: purchaseContext.existingProduct.id } : {
             setNumber, title, description, theme, categoryId: Number(categoryId), ageRecommendation, pieceCount: Number(pieceCount),
           }),
           condition, originalPrice: Number(originalPrice), ...(salePrice ? { salePrice: Number(salePrice) } : {}), currentStock: 0,
         })
-        : await window.adminProducts.createProduct(request)
+        : await adminProducts.createProduct(request)
       setCreatedProduct(product)
       setIsInitialUploadActive(true)
       for (let index = 0; index < imagesRef.current.length; index += 1) await uploadImage(product.legoProduct.id, index)
@@ -202,7 +203,7 @@ function AddProduct({ onProductCreated, onUsedOfferCreated, purchaseContext }: A
     setIsSearching(true)
     setFormError('')
     try {
-      const result = await window.adminProducts.searchLegoProducts(lookupQuery.trim())
+      const result = await adminProducts.searchLegoProducts(lookupQuery.trim())
       setLookupResults(result.items)
     } catch (error) { setFormError(getErrorMessage(error)) }
     finally { setIsSearching(false) }

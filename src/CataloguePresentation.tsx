@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import type { AdminCategory } from '../electron/category-contract'
 import type { AdminProductListing } from '../electron/product-contract'
+import { adminCategories, adminProducts } from './admin-api'
 import { normalizeImageFile } from './image-normalization'
 
 const maximumArtworkBytes = 8 * 1024 * 1024
@@ -37,7 +38,7 @@ function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: Cat
 
   useEffect(() => {
     let cancelled = false
-    void window.adminCategories.list().then(data => { if (!cancelled) setCategories(data) }, loadError => { if (!cancelled) { setCategories([]); setCategoriesError(getErrorMessage(loadError)) } }).finally(() => { if (!cancelled) setCategoriesLoading(false) })
+    void adminCategories.list().then(data => { if (!cancelled) setCategories(data) }, loadError => { if (!cancelled) { setCategories([]); setCategoriesError(getErrorMessage(loadError)) } }).finally(() => { if (!cancelled) setCategoriesLoading(false) })
     return () => { cancelled = true }
   }, [])
 
@@ -49,7 +50,7 @@ function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: Cat
     setHasLoaded(false)
     setError('')
     try {
-      const nextListings = await window.adminProducts.listAdminProductListings()
+      const nextListings = await adminProducts.listAdminProductListings()
       setListings(nextListings)
       setHasLoaded(true)
       if (resetPage) {
@@ -91,8 +92,8 @@ function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: Cat
     setError('')
     setFeedback('')
     try {
-      await window.adminProducts.setFeatureProduct(productId)
-      setListings(await window.adminProducts.listAdminProductListings())
+      await adminProducts.setFeatureProduct(productId)
+      setListings(await adminProducts.listAdminProductListings())
       setFeedback('Feature product updated.')
     } catch (actionError) {
       setError(getErrorMessage(actionError))
@@ -115,7 +116,7 @@ function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: Cat
     setError('')
     setFeedback('')
     try {
-      const artwork = await window.adminProducts.uploadCatalogueArtwork(productId, await normalizeImageFile(file))
+      const artwork = await adminProducts.uploadCatalogueArtwork(productId, await normalizeImageFile(file))
       setListings((current) => current.map((listing) => listing.legoProduct.id === productId ? {
         ...listing,
         legoProduct: { ...listing.legoProduct, catalogueArtworkUrl: artwork.url, catalogueArtworkPublicId: artwork.publicId },
@@ -134,7 +135,7 @@ function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: Cat
     setError('')
     setFeedback('')
     try {
-      await window.adminProducts.removeCatalogueArtwork(productId)
+      await adminProducts.removeCatalogueArtwork(productId)
       setListings((current) => current.map((listing) => listing.legoProduct.id === productId ? {
         ...listing,
         legoProduct: { ...listing.legoProduct, catalogueArtworkUrl: null, catalogueArtworkPublicId: null },
