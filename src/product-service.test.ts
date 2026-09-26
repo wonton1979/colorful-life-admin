@@ -76,6 +76,15 @@ describe('ProductService', () => {
     await expect(service.createProduct({ setNumber: '60325', title: 'Example Set', theme: 'City', categoryId: 11, ageRecommendation: '6+', pieceCount: 235, condition: 'NEW', originalPrice: 29.99 })).rejects.toMatchObject({ code: 'conflict', status: 409, message: 'setNumber already exists' } satisfies Partial<ProductError>)
   })
 
+  it('preserves structured authorization and internal-error codes without changing their safe messages', async () => {
+    const authenticatedFetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'FORBIDDEN', message: 'No product permission' } }), { status: 403 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'INTERNAL_SERVER_ERROR', message: 'Internal server error' } }), { status: 500 }))
+    const service = new ProductService({ authenticatedFetch } as unknown as AuthService)
+    await expect(service.listProducts()).rejects.toMatchObject({ code: 'forbidden', backendCode: 'FORBIDDEN', status: 403 } satisfies Partial<ProductError>)
+    await expect(service.listProducts()).rejects.toMatchObject({ code: 'server', backendCode: 'INTERNAL_SERVER_ERROR', status: 500 } satisfies Partial<ProductError>)
+  })
+
   it('lists all public catalogue pages and parses shared presentation from LegoProduct', async () => {
     const second = { ...productBody, id: 124, legoProduct: { ...productBody.legoProduct, isFeatureProduct: true, catalogueArtworkUrl: 'https://cdn.example/artwork.jpg', catalogueArtworkPublicId: 'stored-artwork' } }
     const authenticatedFetch = vi.fn()

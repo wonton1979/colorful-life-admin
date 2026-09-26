@@ -11,8 +11,21 @@ export interface LoginCredentials {
   password: string
 }
 
+export interface AdminSessionView {
+  user: AdminUser
+  accessTokenExpiresAt: string
+}
+
+export interface AdminSessionEndedNotice {
+  code: 'SESSION_INVALID' | 'AUTH_REQUIRED'
+  message: string
+}
+
 export interface AdminAuthApi {
-  login(credentials: LoginCredentials): Promise<AdminUser>
-  restore(): Promise<AdminUser | null>
+  login(credentials: LoginCredentials): Promise<AdminSessionView>
+  restore(): Promise<AdminSessionView | null>
+  renewSession(): Promise<{ accessTokenExpiresAt: string }>
+  onSessionRenewed(listener: (accessTokenExpiresAt: string) => void): () => void
+  onSessionEnded(listener: (notice: AdminSessionEndedNotice) => void): () => void
   logout(): Promise<void>
 }

@@ -2,13 +2,15 @@ import type { AuthService } from './auth-service.js'
 import type { AdminPurchasesApi, ManualPurchaseCreated, ManualPurchaseInput, Purchase, PurchaseDocument, PurchaseImportResult, PurchaseItem, PurchasePage } from './purchase-contract.js'
 import type { PurchaseReview, ReviewGroup, PurchaseAmendment, ReviewProduct, ReviewListingCreation } from './purchase-contract.js'
 import { parseProduct } from './product-service.js'
+import { readBackendError } from './backend-error.js'
 
 export type PurchaseErrorCode = 'validation' | 'duplicate' | 'conflict' | 'forbidden' | 'not-found' | 'server' | 'session-invalid' | 'malformed-response'
 
 export class PurchaseError extends Error {
   readonly code: PurchaseErrorCode
   readonly status: number | null
-  constructor(code: PurchaseErrorCode, message: string, status: number | null = null) { super(message); this.name = 'PurchaseError'; this.code = code; this.status = status }
+  readonly backendCode: string | null
+  constructor(code: PurchaseErrorCode, message: string, status: number | null = null, backendCode: string | null = null) { super(message); this.name = 'PurchaseError'; this.code = code; this.status = status; this.backendCode = backendCode }
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
@@ -17,19 +19,16 @@ const isNumber = (value: unknown): value is number => typeof value === 'number' 
 const isNullableString = (value: unknown): value is string | null => isString(value) || value === null
 const decimal = (value: unknown): string | null => isString(value) ? value : isNumber(value) ? value.toFixed(2) : null
 
-const errorMessage = async (response: Response, fallback: string): Promise<string> => {
-  try { const body: unknown = await response.json(); if (isRecord(body) && isString(body.error)) return body.error } catch { /* fallback */ }
-  return fallback
-}
-
 const responseError = async (response: Response, importing = false): Promise<PurchaseError> => {
-  const message = await errorMessage(response, 'The purchase operation could not be completed.')
-  if (response.status === 400) return new PurchaseError('validation', message, response.status)
-  if (response.status === 401) return new PurchaseError('session-invalid', 'Your session is no longer valid. Please sign in again.', response.status)
-  if (response.status === 403) return new PurchaseError('forbidden', 'This account cannot manage purchase documents.', response.status)
-  if (response.status === 404) return new PurchaseError('not-found', 'The purchase could not be found.', response.status)
-  if (response.status === 409) return new PurchaseError(importing ? 'duplicate' : 'conflict', importing ? 'This purchase document has already been imported.' : message, response.status)
-  return new PurchaseError('server', response.status >= 500 ? 'The Colorful Life service is unavailable right now.' : message, response.status)
+  const details = await readBackendError(response, 'The purchase operation could not be completed.')
+  const { message, code } = details
+  if (response.status === 400) return new PurchaseError('validation', message, response.status, code)
+  if (code === 'SESSION_INVALID') return new PurchaseError('session-invalid', 'Your session has expired. Please sign in again.', response.status, code)
+  if (code === 'AUTH_REQUIRED') return new PurchaseError('session-invalid', 'Sign in is required to continue.', response.status, code)
+  if (response.status === 403 || code === 'FORBIDDEN') return new PurchaseError('forbidden', 'This account cannot manage purchase documents.', response.status, code)
+  if (response.status === 404) return new PurchaseError('not-found', 'The purchase could not be found.', response.status, code)
+  if (response.status === 409) return new PurchaseError(importing ? 'duplicate' : 'conflict', importing ? 'This purchase document has already been imported.' : message, response.status, code)
+  return new PurchaseError('server', response.status >= 500 || code === 'INTERNAL_SERVER_ERROR' ? 'The Colorful Life service is unavailable right now.' : message, response.status, code)
 }
 
 const parseItem = (value: unknown): PurchaseItem => {

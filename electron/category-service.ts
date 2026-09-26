@@ -1,22 +1,19 @@
 import type { AuthService } from './auth-service.js'
 import type { AdminCategory, AdminCategoriesApi, CategoryCreate, CategoryTextUpdate } from './category-contract.js'
+import { readBackendError } from './backend-error.js'
 
 export type CategoryErrorCode = 'validation' | 'conflict' | 'not-found' | 'forbidden' | 'session-invalid' | 'server' | 'malformed-response'
 
 export class CategoryError extends Error {
   readonly code: CategoryErrorCode
   readonly status: number | null
-  constructor(code: CategoryErrorCode, message: string, status: number | null = null) { super(message); this.name = 'CategoryError'; this.code = code; this.status = status }
+  readonly backendCode: string | null
+  constructor(code: CategoryErrorCode, message: string, status: number | null = null, backendCode: string | null = null) { super(message); this.name = 'CategoryError'; this.code = code; this.status = status; this.backendCode = backendCode }
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 const isString = (value: unknown): value is string => typeof value === 'string'
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
-
-const errorMessage = async (response: Response, fallback: string) => {
-  try { const body: unknown = await response.json(); if (isRecord(body) && isString(body.error)) return body.error } catch { /* fallback */ }
-  return fallback
-}
 
 const parseCategory = (value: unknown): AdminCategory => {
   if (!isRecord(value) || !isNumber(value.id) || !isString(value.name) || (!isString(value.subtitle) && value.subtitle !== null) || (!isString(value.description) && value.description !== null) || (!isString(value.imageUrl) && value.imageUrl !== null) || (!isString(value.imagePublicId) && value.imagePublicId !== null)) throw new CategoryError('malformed-response', 'The server returned an invalid category response.')
@@ -54,14 +51,16 @@ export class CategoryService implements AdminCategoriesApi {
   private async parseMutation(response: Response) { if (!response.ok) throw await this.responseError(response, 'mutation'); return parseCategory(await response.json()) }
 
   private async responseError(response: Response, operation: 'list' | 'mutation') {
-    const message = await errorMessage(response, response.status === 409 ? 'A category with this name already exists.' : 'The category action could not be completed.')
-    if (response.status === 400) return new CategoryError('validation', message, response.status)
-    if (response.status === 401) return new CategoryError('session-invalid', 'Your session is no longer valid. Please sign in again.', response.status)
-    if (response.status === 403) return new CategoryError('forbidden', 'This account cannot manage categories.', response.status)
-    if (response.status === 404 && operation === 'list') return new CategoryError('server', 'The category management endpoint was not found. Restart the backend and try again.', response.status)
-    if (response.status === 404) return new CategoryError('not-found', 'The category could not be found.', response.status)
-    if (response.status === 409) return new CategoryError('conflict', message, response.status)
-    return new CategoryError('server', response.status >= 500 ? 'The Colorful Life service is unavailable right now.' : message, response.status)
+    const details = await readBackendError(response, response.status === 409 ? 'A category with this name already exists.' : 'The category action could not be completed.')
+    const { message, code } = details
+    if (response.status === 400) return new CategoryError('validation', message, response.status, code)
+    if (code === 'SESSION_INVALID') return new CategoryError('session-invalid', 'Your session has expired. Please sign in again.', response.status, code)
+    if (code === 'AUTH_REQUIRED') return new CategoryError('session-invalid', 'Sign in is required to continue.', response.status, code)
+    if (response.status === 403 || code === 'FORBIDDEN') return new CategoryError('forbidden', 'This account cannot manage categories.', response.status, code)
+    if (response.status === 404 && operation === 'list') return new CategoryError('server', 'The category management endpoint was not found. Restart the backend and try again.', response.status, code)
+    if (response.status === 404) return new CategoryError('not-found', 'The category could not be found.', response.status, code)
+    if (response.status === 409) return new CategoryError('conflict', message, response.status, code)
+    return new CategoryError('server', response.status >= 500 || code === 'INTERNAL_SERVER_ERROR' ? 'The Colorful Life service is unavailable right now.' : message, response.status, code)
   }
 }
 

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import type { PurchaseReview as Review, ReviewGroup, ReviewLine, ReviewProduct, PurchaseAmendment } from '../electron/purchase-contract'
 import type { ProductListing } from '../electron/product-contract'
+import { adminProducts, adminPurchases } from './admin-api'
 import AddProduct from './AddProduct'
 import './PurchaseReview.css'
 
@@ -53,7 +54,7 @@ export default function PurchaseReview({ initialReview, onBack }: { initialRevie
     setQuery(initialQuery); setProducts([]); setSearchedProducts(false); setError(''); setLoadedListings(false)
     busy.current = true; setPending(true); setPendingAction(`load-listings-${group.id}`)
     try {
-      const nextListings = await window.adminProducts.listProducts()
+      const nextListings = await adminProducts.listProducts()
       setListings(nextListings); setLoadedListings(true)
       if (!group.listing && initialQuery) {
         const matches = listingMatches(nextListings, initialQuery).filter(listing => listing.legoProduct.setNumber.trim().toLowerCase() === initialQuery.trim().toLowerCase())
@@ -66,7 +67,7 @@ export default function PurchaseReview({ initialReview, onBack }: { initialRevie
   const searchProducts = async (groupId: number) => {
     if (busy.current || !query.trim()) return
     busy.current = true; setPending(true); setPendingAction(`search-products-${groupId}`); setError(''); setSearchedProducts(false)
-    try { setProducts(await window.adminPurchases.searchProducts(purchaseId, query.trim())); setSearchedProducts(true) }
+    try { setProducts(await adminPurchases.searchProducts(purchaseId, query.trim())); setSearchedProducts(true) }
     catch (e) { setError(errorMessage(e)) }
     finally { busy.current = false; setPending(false); setPendingAction(null) }
   }
@@ -74,7 +75,7 @@ export default function PurchaseReview({ initialReview, onBack }: { initialRevie
     if (!creation || busy.current) return
     busy.current = true; setPending(true); setPendingAction('link-created-listing'); setError(''); setFeedback('')
     try {
-      const refreshed = await window.adminPurchases.resolve(creation.purchaseId, creation.groupId, {
+      const refreshed = await adminPurchases.resolve(creation.purchaseId, creation.groupId, {
         revision: creation.revision, productListingId: listing.id,
       })
       setReview(refreshed); setCreation(null); setPanel(null)
@@ -92,7 +93,7 @@ export default function PurchaseReview({ initialReview, onBack }: { initialRevie
   return <section className="purchases-workspace purchase-review" aria-labelledby="purchase-review-title" aria-busy={pending}>
     <div className="review-toolbar">
       <button className="button button-secondary" disabled={pending} onClick={onBack}>← Purchase History</button>
-      <button className="button button-secondary" disabled={pending} aria-busy={pendingAction === 'refresh-review'} onClick={() => void mutate(() => window.adminPurchases.review(purchaseId), 'Review refreshed.', 'refresh-review')}>{pendingAction === 'refresh-review' ? 'Refreshing…' : 'Refresh review'}</button>
+      <button className="button button-secondary" disabled={pending} aria-busy={pendingAction === 'refresh-review'} onClick={() => void mutate(() => adminPurchases.review(purchaseId), 'Review refreshed.', 'refresh-review')}>{pendingAction === 'refresh-review' ? 'Refreshing…' : 'Refresh review'}</button>
     </div>
     <p className="eyebrow">PURCHASE REVIEW</p>
     <h2 id="purchase-review-title">{review.purchase.sourceOrderReference}</h2>
@@ -116,13 +117,13 @@ export default function PurchaseReview({ initialReview, onBack }: { initialRevie
         {group.canResolve && <button className="button button-secondary" disabled={pending} aria-busy={pendingAction === `load-listings-${group.id}`} onClick={() => void openResolution(group)}>{pendingAction === `load-listings-${group.id}` ? 'Loading listings…' : group.listing ? 'Change Listing' : 'Resolve Listing'}</button>}
         {group.state === 'MATCHED' && group.listing?.active && <button className="button button-primary" disabled={pending} onClick={() => {
           if (window.confirm(`Approve and receive ${group.pendingQuantity} units into ${group.listing?.condition} / ${group.listing?.setNumber}? This cannot be amended afterward.`))
-            void mutate(() => window.adminPurchases.receive(purchaseId, group.id, { revision: review.revision }), 'Purchase item received into inventory.', `receive-${group.id}`)
+            void mutate(() => adminPurchases.receive(purchaseId, group.id, { revision: review.revision }), 'Purchase item received into inventory.', `receive-${group.id}`)
         }} aria-busy={pendingAction === `receive-${group.id}`}>{pendingAction === `receive-${group.id}` ? 'Receiving…' : <>Approve &amp; Receive {group.pendingQuantity}</>}</button>}
       </div>
       {panel?.id === group.id && panel.kind === 'amend' && <div className="review-editor">
         <p>Amend individual source lines. Quantity and price changes recalculate this document’s allocations and total; shipping and discount stay unchanged.</p>
         {group.lines.map(line => <LineAmend key={line.id + review.revision} line={line} pending={pending} actionPending={pendingAction === `amend-${line.id}`} onSave={input =>
-          mutate(() => window.adminPurchases.amend(purchaseId, line.id, { ...input, revision: review.revision }), 'Source line amended; costs recalculated where required.', `amend-${line.id}`)} />)}
+          mutate(() => adminPurchases.amend(purchaseId, line.id, { ...input, revision: review.revision }), 'Source line amended; costs recalculated where required.', `amend-${line.id}`)} />)}
         <button className="button button-secondary" disabled={pending} onClick={() => setPanel(null)}>Cancel amendment</button>
       </div>}
       {panel?.id === group.id && panel.kind === 'resolve' && <div className="review-editor">
@@ -133,7 +134,7 @@ export default function PurchaseReview({ initialReview, onBack }: { initialRevie
             {listingMatches(listings, query).map(l =>
               <option key={l.id} value={l.id}>{l.condition} / {l.legoProduct.setNumber} · {l.legoProduct.title}</option>)}
           </select></label>
-          <button className="button button-primary" disabled={pending} aria-busy={pendingAction === `resolve-${group.id}`} onClick={() => void mutate(() => window.adminPurchases.resolve(purchaseId, group.id, {
+          <button className="button button-primary" disabled={pending} aria-busy={pendingAction === `resolve-${group.id}`} onClick={() => void mutate(() => adminPurchases.resolve(purchaseId, group.id, {
             revision: review.revision, productListingId: selectedListing ? Number(selectedListing) : null,
           }), 'Listing association saved for all source lines.', `resolve-${group.id}`)}>{pendingAction === `resolve-${group.id}` ? 'Linking…' : 'Link selected listing'}</button>
         </>}

@@ -1,6 +1,7 @@
 import type { AdminProductsApi } from '../electron/product-contract.js'
 import type { AdminCategoriesApi } from '../electron/category-contract.js'
 import type { AdminPurchasesApi } from '../electron/purchase-contract.js'
+import type { AdminAuthApi } from '../electron/auth-contract.js'
 
 declare global {
   interface AdminUser {
@@ -9,12 +10,6 @@ declare global {
     role: 'ADMIN'
     createdAt: string
     updatedAt: string
-  }
-
-  interface AdminAuthApi {
-    login(credentials: { email: string; password: string }): Promise<AdminUser>
-    restore(): Promise<AdminUser | null>
-    logout(): Promise<void>
   }
 
   interface Window {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import './App.css'
 import AddProduct from './AddProduct'
@@ -7,45 +7,130 @@ import Categories from './Categories'
 import Purchases from './Purchases'
 import ProductEditor from './ProductEditor'
 import type { ProductListing, UsedOfferCreated } from '../electron/product-contract'
+import type { AdminSessionView } from '../electron/auth-contract'
+import { isAdminIpcError } from '../electron/ipc-error-contract'
+import { adminAuth } from './admin-api'
+import { useSessionExpiry } from './useSessionExpiry'
 
 type ViewState = 'restoring' | 'signed-out' | 'signed-in'
 
 function App() {
   const [viewState, setViewState] = useState<ViewState>(() => window.adminAuth ? 'restoring' : 'signed-out')
   const [user, setUser] = useState<AdminUser | null>(null)
+  const [accessTokenExpiresAt, setAccessTokenExpiresAt] = useState<string | null>(null)
+  const [expiryScheduleRevision, setExpiryScheduleRevision] = useState(0)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [isRenewing, setIsRenewing] = useState(false)
+  const [renewalError, setRenewalError] = useState('')
+  const [renewalUnavailable, setRenewalUnavailable] = useState(false)
   const [presentationRefreshToken, setPresentationRefreshToken] = useState(0)
   const [presentationRefreshCategory, setPresentationRefreshCategory] = useState<number | null>(null)
   const [section, setSection] = useState<'products' | 'edit-products' | 'categories' | 'purchases'>('products')
+  const expiryRef = useRef<string | null>(null)
+  const sessionRevision = useRef(0)
+  const renewalPending = useRef(false)
+  const renewButtonRef = useRef<HTMLButtonElement | null>(null)
+  const previouslyFocused = useRef<HTMLElement | null>(null)
+
+  const setSessionExpiry = useCallback((expiresAt: string | null) => {
+    sessionRevision.current += 1
+    setExpiryScheduleRevision(sessionRevision.current)
+    expiryRef.current = expiresAt
+    setAccessTokenExpiresAt(expiresAt)
+  }, [])
+
+  const applySession = useCallback((session: AdminSessionView | null) => {
+    sessionRevision.current += 1
+    setExpiryScheduleRevision(sessionRevision.current)
+    expiryRef.current = session?.accessTokenExpiresAt ?? null
+    setAccessTokenExpiresAt(session?.accessTokenExpiresAt ?? null)
+    setUser(session?.user ?? null)
+  }, [])
+
+  const finishLocalSession = useCallback((message: string) => {
+    applySession(null)
+    setViewState('signed-out')
+    setEmail('')
+    setPassword('')
+    setError(message)
+    setRenewalError('')
+    setRenewalUnavailable(false)
+    setIsRenewing(false)
+    renewalPending.current = false
+  }, [applySession])
+
+  const expireCurrentSession = useCallback((scheduledExpiry: string, scheduleRevision: number) => {
+    if (expiryRef.current !== scheduledExpiry || sessionRevision.current !== scheduleRevision) return
+    finishLocalSession('Your session has expired. Please sign in again.')
+    void adminAuth.logout()
+  }, [finishLocalSession])
+
+  const isLatestExpiry = useCallback((scheduledExpiry: string, scheduleRevision: number) =>
+    expiryRef.current === scheduledExpiry && sessionRevision.current === scheduleRevision, [])
+  const { warningOpen, remainingSeconds, dismissWarning: dismissExpiryWarning } = useSessionExpiry(accessTokenExpiresAt, expireCurrentSession, isLatestExpiry, expiryScheduleRevision)
+
+  useEffect(() => {
+    if (warningOpen) {
+      previouslyFocused.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      renewButtonRef.current?.focus()
+      return
+    }
+    if (previouslyFocused.current?.isConnected) previouslyFocused.current.focus()
+    previouslyFocused.current = null
+  }, [warningOpen])
 
   useEffect(() => {
     if (!window.adminAuth) return
+    return adminAuth.onSessionRenewed((expiresAt) => {
+      if (!expiryRef.current) return
+      setSessionExpiry(expiresAt)
+      dismissExpiryWarning()
+      setRenewalError('')
+      setRenewalUnavailable(false)
+      renewalPending.current = false
+      setIsRenewing(false)
+    })
+  }, [dismissExpiryWarning, setSessionExpiry])
 
-    void Promise.resolve().then(() => window.adminAuth.restore()).then(
-      (restoredUser) => {
-        setUser(restoredUser)
-        setViewState(restoredUser ? 'signed-in' : 'signed-out')
+  useEffect(() => {
+    if (!window.adminAuth) return
+    return adminAuth.onSessionEnded((notice) => finishLocalSession(notice.message))
+  }, [finishLocalSession])
+
+  useEffect(() => {
+    if (!window.adminAuth) return
+    let active = true
+
+    void Promise.resolve().then(() => adminAuth.restore()).then(
+      (restoredSession) => {
+        if (!active) return
+        applySession(restoredSession)
+        setViewState(restoredSession ? 'signed-in' : 'signed-out')
       },
-      () => {
-        setError('Unable to restore your session. Please sign in again.')
+      (restoreError: unknown) => {
+        if (!active) return
+        const message = restoreError instanceof Error ? restoreError.message : 'Unable to restore your session.'
+        setError(message)
         setViewState('signed-out')
       },
     )
-  }, [])
+    return () => { active = false }
+  }, [applySession])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
     setIsSubmitting(true)
     try {
-      const authenticatedUser = await window.adminAuth.login({ email, password })
-      setUser(authenticatedUser)
+      const authenticatedSession = await adminAuth.login({ email, password })
+      applySession(authenticatedSession)
       setPassword('')
+      setError('')
       setViewState('signed-in')
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Sign-in failed.')
@@ -54,16 +139,43 @@ function App() {
     }
   }
 
+  const handleRenewSession = async () => {
+    if (renewalPending.current || !warningOpen) return
+    const currentExpiry = expiryRef.current
+    if (!currentExpiry) return
+    if (Date.parse(currentExpiry) <= Date.now()) {
+      expireCurrentSession(currentExpiry, sessionRevision.current)
+      return
+    }
+
+    renewalPending.current = true
+    const requestRevision = sessionRevision.current
+    setIsRenewing(true)
+    setRenewalError('')
+    try {
+      const renewedSession = await adminAuth.renewSession()
+      if (sessionRevision.current !== requestRevision || !expiryRef.current) return
+      setSessionExpiry(renewedSession.accessTokenExpiresAt)
+      dismissExpiryWarning()
+      setRenewalUnavailable(false)
+    } catch (renewalFailure) {
+      if (sessionRevision.current === requestRevision) {
+        setRenewalError(renewalFailure instanceof Error ? renewalFailure.message : 'Session renewal failed. Try again before the countdown ends.')
+        setRenewalUnavailable(isAdminIpcError(renewalFailure) && renewalFailure.code === 'renewal-unavailable')
+      }
+    } finally {
+      renewalPending.current = false
+      setIsRenewing(false)
+    }
+  }
+
   const handleLogout = async () => {
     if (isLoggingOut) return
     setIsLoggingOut(true)
+    finishLocalSession('')
+    setViewState('signed-out')
     try {
-      await window.adminAuth.logout()
-      setUser(null)
-      setViewState('signed-out')
-      setEmail('')
-      setPassword('')
-      setError('')
+      await adminAuth.logout()
     } finally {
       setIsLoggingOut(false)
     }
@@ -86,14 +198,28 @@ function App() {
   if (viewState === 'signed-in' && user) {
     return (
       <main className="shell">
-        <header className="shell-header">
-          <div><p className="eyebrow">COLORFUL LIFE</p><div className="workspace-title"><h1>Admin workspace</h1><span className="admin-status" aria-label="Administrator access confirmed">✓</span><span className="admin-email">{user.email}</span></div></div>
-          <button className="button button-secondary" type="button" onClick={() => void handleLogout()} disabled={isLoggingOut} aria-busy={isLoggingOut}>{isLoggingOut ? 'Signing out…' : 'Sign out'}</button>
-        </header>
-        <nav className="workspace-nav" aria-label="Admin sections"><button className={`button ${section === 'products' ? 'button-primary' : 'button-secondary'}`} type="button" onClick={() => setSection('products')}>Products</button><button className={`button ${section === 'edit-products' ? 'button-primary' : 'button-secondary'}`} type="button" onClick={() => setSection('edit-products')}>Edit products</button><button className={`button ${section === 'categories' ? 'button-primary' : 'button-secondary'}`} type="button" onClick={() => setSection('categories')}>Categories</button><button className={`button ${section === 'purchases' ? 'button-primary' : 'button-secondary'}`} type="button" onClick={() => setSection('purchases')}>Purchases</button></nav>
-        {section === 'edit-products' ? <ProductEditor /> : section === 'categories' ? <Categories /> : section === 'purchases' ? <Purchases /> : <div className="catalogue-workspace">
-          <AddProduct onProductCreated={handleProductCreated} onUsedOfferCreated={handleUsedOfferCreated} />
-          <CataloguePresentation refreshToken={presentationRefreshToken} refreshCategory={presentationRefreshCategory} />
+        <div inert={warningOpen}>
+          <header className="shell-header">
+            <div><p className="eyebrow">COLORFUL LIFE</p><div className="workspace-title"><h1>Admin workspace</h1><span className="admin-status" aria-label="Administrator access confirmed">✓</span><span className="admin-email">{user.email}</span></div></div>
+            <button className="button button-secondary" type="button" onClick={() => void handleLogout()} disabled={isLoggingOut} aria-busy={isLoggingOut}>{isLoggingOut ? 'Signing out…' : 'Sign out'}</button>
+          </header>
+          <nav className="workspace-nav" aria-label="Admin sections"><button className={`button ${section === 'products' ? 'button-primary' : 'button-secondary'}`} type="button" onClick={() => setSection('products')}>Products</button><button className={`button ${section === 'edit-products' ? 'button-primary' : 'button-secondary'}`} type="button" onClick={() => setSection('edit-products')}>Edit products</button><button className={`button ${section === 'categories' ? 'button-primary' : 'button-secondary'}`} type="button" onClick={() => setSection('categories')}>Categories</button><button className={`button ${section === 'purchases' ? 'button-primary' : 'button-secondary'}`} type="button" onClick={() => setSection('purchases')}>Purchases</button></nav>
+          {section === 'edit-products' ? <ProductEditor /> : section === 'categories' ? <Categories /> : section === 'purchases' ? <Purchases /> : <div className="catalogue-workspace">
+            <AddProduct onProductCreated={handleProductCreated} onUsedOfferCreated={handleUsedOfferCreated} />
+            <CataloguePresentation refreshToken={presentationRefreshToken} refreshCategory={presentationRefreshCategory} />
+          </div>}
+        </div>
+        {warningOpen && <div className="session-expiry-backdrop">
+          <section className="session-expiry-modal" role="dialog" aria-modal="true" aria-labelledby="session-expiry-title">
+            <p className="eyebrow">SECURITY</p>
+            <h2 id="session-expiry-title">Your session is about to expire</h2>
+            <p>For security, your Admin session will expire in:</p>
+            <p className="session-expiry-countdown" role="status" aria-live="polite">{remainingSeconds} {remainingSeconds === 1 ? 'second' : 'seconds'}</p>
+            {renewalError && <p className="error-message" role="alert">{renewalError}</p>}
+            <button ref={renewButtonRef} className="button button-primary" type="button" onClick={() => void handleRenewSession()} disabled={isRenewing || renewalUnavailable} aria-busy={isRenewing}>
+              {isRenewing ? 'Renewing…' : 'Renew Session'}
+            </button>
+          </section>
         </div>}
       </main>
     )

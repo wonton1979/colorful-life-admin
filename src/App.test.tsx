@@ -1,16 +1,20 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 
 const admin = { id: 1, email: 'admin@example.com', role: 'ADMIN' as const, createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+const adminSession = { user: admin, accessTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() }
 
 describe('App authentication flow', () => {
-  afterEach(() => cleanup())
+  afterEach(() => { cleanup(); vi.useRealTimers() })
 
   beforeEach(() => {
     window.adminAuth = {
       restore: vi.fn().mockResolvedValue(null),
-      login: vi.fn().mockResolvedValue(admin),
+      login: vi.fn().mockResolvedValue(adminSession),
+      renewSession: vi.fn().mockResolvedValue({ accessTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() }),
+      onSessionRenewed: vi.fn().mockReturnValue(() => undefined),
+      onSessionEnded: vi.fn().mockReturnValue(() => undefined),
       logout: vi.fn().mockResolvedValue(undefined),
     }
     window.adminProducts = {
@@ -50,8 +54,8 @@ describe('App authentication flow', () => {
   })
 
   it('shows the loading submission state', async () => {
-    let resolveLogin: (value: typeof admin) => void = () => undefined
-    window.adminAuth.login = vi.fn().mockReturnValue(new Promise<typeof admin>((resolve) => { resolveLogin = resolve }))
+    let resolveLogin: (value: typeof adminSession) => void = () => undefined
+    window.adminAuth.login = vi.fn().mockReturnValue(new Promise<typeof adminSession>((resolve) => { resolveLogin = resolve }))
     render(<App />)
     await screen.findByRole('heading', { name: /sign in to continue/i })
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: admin.email } })
@@ -60,7 +64,7 @@ describe('App authentication flow', () => {
     const pendingButton = await screen.findByRole('button', { name: /signing in/i })
     expect(pendingButton).toBeDisabled()
     expect(pendingButton).toHaveAttribute('aria-busy', 'true')
-    resolveLogin(admin)
+    resolveLogin(adminSession)
   })
 
   it('toggles password visibility without submitting or changing its value', async () => {
@@ -94,7 +98,7 @@ describe('App authentication flow', () => {
   })
 
   it('renders the restored shell and logs out', async () => {
-    window.adminAuth.restore = vi.fn().mockResolvedValue(admin)
+    window.adminAuth.restore = vi.fn().mockResolvedValue(adminSession)
     render(<App />)
     expect(await screen.findByRole('heading', { name: 'Admin workspace' })).toBeInTheDocument()
     expect(screen.getByText(admin.email)).toBeInTheDocument()
@@ -105,7 +109,7 @@ describe('App authentication flow', () => {
   })
 
   it('opens the shared product editing workflow from the Admin navigation', async () => {
-    window.adminAuth.restore = vi.fn().mockResolvedValue(admin)
+    window.adminAuth.restore = vi.fn().mockResolvedValue(adminSession)
     render(<App />)
     await screen.findByRole('heading', { name: 'Admin workspace' })
     fireEvent.click(screen.getByRole('button', { name: 'Edit products' }))
@@ -113,18 +117,131 @@ describe('App authentication flow', () => {
     expect(screen.getByLabelText('Set number or product title')).toBeInTheDocument()
   })
 
-  it('marks only an in-flight logout as busy', async () => {
-    window.adminAuth.restore = vi.fn().mockResolvedValue(admin)
+  it('returns to Login immediately while backend logout revocation is pending', async () => {
+    window.adminAuth.restore = vi.fn().mockResolvedValue(adminSession)
     let finishLogout: () => void = () => undefined
     window.adminAuth.logout = vi.fn().mockImplementation(() => new Promise<void>(resolve => { finishLogout = resolve }))
     render(<App />)
     await screen.findByRole('heading', { name: 'Admin workspace' })
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
-    const pendingButton = screen.getByRole('button', { name: 'Signing out…' })
-    expect(pendingButton).toBeDisabled()
-    expect(pendingButton).toHaveAttribute('aria-busy', 'true')
-    finishLogout()
     expect(await screen.findByRole('heading', { name: /sign in to continue/i })).toBeInTheDocument()
+    expect(window.adminAuth.logout).toHaveBeenCalledOnce()
+    finishLogout()
+  })
+
+  it('renews from the expiry modal without resetting the current Product Editor state', async () => {
+    vi.useFakeTimers()
+    const now = new Date('2026-09-26T12:00:00.000Z')
+    vi.setSystemTime(now)
+    const nextExpiry = new Date(now.getTime() + 60 * 60 * 1000).toISOString()
+    window.adminAuth.restore = vi.fn().mockResolvedValue({ user: admin, accessTokenExpiresAt: new Date(now.getTime() + 10_000).toISOString() })
+    window.adminAuth.renewSession = vi.fn().mockResolvedValue({ accessTokenExpiresAt: nextExpiry })
+    const { container } = render(<App />)
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    fireEvent.click(screen.getByRole('button', { name: 'Edit products' }))
+    const search = screen.getByLabelText('Set number or product title')
+    fireEvent.change(search, { target: { value: '75318' } })
+
+    act(() => vi.advanceTimersByTime(0))
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    expect(screen.getByRole('status')).toHaveTextContent('10 seconds')
+    expect(container.querySelector('.shell > div')).toHaveAttribute('inert')
+    fireEvent.click(screen.getByRole('button', { name: 'Renew Session' }))
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+
+    expect(window.adminAuth.renewSession).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Edit existing product' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Set number or product title')).toHaveValue('75318')
+  })
+
+  it('allows only one in-flight Renew Session request', async () => {
+    vi.useFakeTimers()
+    const now = new Date('2026-09-26T12:00:00.000Z')
+    vi.setSystemTime(now)
+    window.adminAuth.restore = vi.fn().mockResolvedValue({ user: admin, accessTokenExpiresAt: new Date(now.getTime() + 30_000).toISOString() })
+    let finishRenewal: (value: { accessTokenExpiresAt: string }) => void = () => undefined
+    window.adminAuth.renewSession = vi.fn().mockReturnValue(new Promise((resolve) => { finishRenewal = resolve }))
+    render(<App />)
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    act(() => vi.advanceTimersByTime(0))
+    const renewButton = screen.getByRole('button', { name: 'Renew Session' })
+    fireEvent.click(renewButton)
+    fireEvent.click(renewButton)
+    expect(window.adminAuth.renewSession).toHaveBeenCalledOnce()
+    expect(screen.getByRole('button', { name: 'Renewing…' })).toBeDisabled()
+    await act(async () => {
+      finishRenewal({ accessTokenExpiresAt: new Date(now.getTime() + 60 * 60 * 1000).toISOString() })
+      await Promise.resolve()
+    })
+  })
+
+  it('ends the local session at actual token expiry without adding a grace period', async () => {
+    vi.useFakeTimers()
+    const now = new Date('2026-09-26T12:00:00.000Z')
+    vi.setSystemTime(now)
+    window.adminAuth.restore = vi.fn().mockResolvedValue({ user: admin, accessTokenExpiresAt: new Date(now.getTime() + 2_000).toISOString() })
+    render(<App />)
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    act(() => vi.advanceTimersByTime(0))
+    expect(screen.getByRole('status')).toHaveTextContent('2 seconds')
+    act(() => vi.advanceTimersByTime(1_999))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(1))
+    expect(screen.getByRole('heading', { name: /sign in to continue/i })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Your session has expired')
+    expect(window.adminAuth.logout).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('reschedules the warning after a background renewal and ignores the old expiry timer', async () => {
+    vi.useFakeTimers()
+    const now = new Date('2026-09-26T12:00:00.000Z')
+    vi.setSystemTime(now)
+    let notifyRenewed: ((expiresAt: string) => void) | undefined
+    window.adminAuth.restore = vi.fn().mockResolvedValue({ user: admin, accessTokenExpiresAt: new Date(now.getTime() + 5_000).toISOString() })
+    window.adminAuth.onSessionRenewed = vi.fn((listener) => {
+      notifyRenewed = listener
+      return () => undefined
+    })
+    render(<App />)
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    act(() => vi.advanceTimersByTime(0))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    act(() => notifyRenewed?.(new Date(now.getTime() + 60 * 60 * 1000).toISOString()))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(5_000))
+    expect(screen.getByRole('heading', { name: 'Admin workspace' })).toBeInTheDocument()
+    expect(window.adminAuth.logout).not.toHaveBeenCalled()
+  })
+
+  it('cancels expiry timers after manual logout', async () => {
+    vi.useFakeTimers()
+    const now = new Date('2026-09-26T12:00:00.000Z')
+    vi.setSystemTime(now)
+    window.adminAuth.restore = vi.fn().mockResolvedValue({ user: admin, accessTokenExpiresAt: new Date(now.getTime() + 120_000).toISOString() })
+    render(<App />)
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(screen.getByRole('heading', { name: /sign in to continue/i })).toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(120_000))
+    expect(window.adminAuth.logout).toHaveBeenCalledOnce()
+  })
+
+  it('shows a session-expired explanation when the main process ends an invalid session', async () => {
+    let notifySessionEnded: ((notice: { code: 'SESSION_INVALID'; message: string }) => void) | undefined
+    window.adminAuth.restore = vi.fn().mockResolvedValue(adminSession)
+    window.adminAuth.onSessionEnded = vi.fn((listener) => {
+      notifySessionEnded = listener as typeof notifySessionEnded
+      return () => undefined
+    })
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Admin workspace' })
+
+    act(() => notifySessionEnded?.({ code: 'SESSION_INVALID', message: 'Your session has expired. Please sign in again.' }))
+    expect(await screen.findByRole('heading', { name: /sign in to continue/i })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Your session has expired')
   })
 
   it('syncs Presentation Management to the created product category using the backend category ID', async () => {
@@ -135,7 +252,7 @@ describe('App authentication flow', () => {
       condition: 'NEW' as const, originalPrice: '19.99', salePrice: null, currentStock: 1, availableStock: 1, createdAt: '2026-01-01', updatedAt: '2026-01-01',
       legoProduct: { id: 654, setNumber: '75966', title: 'Harry Potter Set', description: null, theme: 'Harry Potter', ageRecommendation: '8+', pieceCount: 754, isRetired: false, isFeatureProduct: false, catalogueArtworkUrl: null, catalogueArtworkPublicId: null, productImages: [], createdAt: '2026-01-01', updatedAt: '2026-01-01' },
     }
-    window.adminAuth.restore = vi.fn().mockResolvedValue(admin)
+    window.adminAuth.restore = vi.fn().mockResolvedValue(adminSession)
     window.adminProducts.createProduct = vi.fn().mockResolvedValue(createdProduct)
     window.adminProducts.listAdminProductListings = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([{
       id: 321, condition: 'NEW', active: true, usedLifecycle: null, currentStock: 1, availableStock: 1,
@@ -158,7 +275,7 @@ describe('App authentication flow', () => {
   })
 
   it('syncs Presentation Management to the selected LegoProduct category after a Used offer is created', async () => {
-    window.adminAuth.restore = vi.fn().mockResolvedValue(admin)
+    window.adminAuth.restore = vi.fn().mockResolvedValue(adminSession)
     const harryPotter = { id: 87, name: 'Harry Potter', subtitle: 'Magic in every build', description: null, imageUrl: null, imagePublicId: null }
     window.adminCategories.list = vi.fn().mockResolvedValue([{ id: 4, name: 'City', subtitle: null, description: null, imageUrl: null, imagePublicId: null }, harryPotter])
     window.adminProducts.searchLegoProducts = vi.fn().mockResolvedValue({ items: [{ id: 456, setNumber: '75966', title: 'Existing Harry Potter Set', description: null, theme: 'Harry Potter', ageRecommendation: '8+', pieceCount: 754, category: { id: 87, name: 'Harry Potter' }, isRetired: false, usedOfferStatus: 'NONE' as const }], pagination: { page: 1, pageSize: 20, totalItems: 1, totalPages: 1 } })

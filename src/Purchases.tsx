@@ -3,6 +3,7 @@ import type { ChangeEvent, DragEvent } from 'react'
 import PurchaseReview from './PurchaseReview'
 import ManualPurchaseForm from './ManualPurchaseForm'
 import type { ManualPurchaseInput, Purchase, PurchaseImportResult, PurchaseReview as Review } from '../electron/purchase-contract.js'
+import { adminPurchases } from './admin-api'
 
 const maximumPdfBytes = 10 * 1024 * 1024
 const pageSize = 20
@@ -31,7 +32,7 @@ function Purchases() {
     setHistoryLoading(true)
     setHistoryError('')
     try {
-      const result = await window.adminPurchases.list(nextPage, pageSize)
+      const result = await adminPurchases.list(nextPage, pageSize)
       setPurchases(result.purchases)
       setPage(result.pagination.page)
       setTotalPages(Math.max(1, result.pagination.totalPages))
@@ -72,7 +73,7 @@ function Purchases() {
     setImportError('')
     setImportResult(null)
     try {
-      const result = await window.adminPurchases.importPdf({ bytes: new Uint8Array(await file.arrayBuffer()), filename: file.name, mimeType: 'application/pdf' })
+      const result = await adminPurchases.importPdf({ bytes: new Uint8Array(await file.arrayBuffer()), filename: file.name, mimeType: 'application/pdf' })
       setImportResult(result)
       setFile(null)
       await loadHistory(1)
@@ -88,7 +89,7 @@ function Purchases() {
     setOpeningPurchaseId(purchaseId)
     setDetailsError('')
     try {
-      setSelectedPurchase(await window.adminPurchases.review(purchaseId))
+      setSelectedPurchase(await adminPurchases.review(purchaseId))
     } catch (error) {
       setDetailsError(messageFor(error))
     } finally {
@@ -98,7 +99,7 @@ function Purchases() {
   }
 
   const createManualPurchase = async (input: ManualPurchaseInput) => {
-    const created = await window.adminPurchases.createManual(input)
+    const created = await adminPurchases.createManual(input)
     setManualPurchaseOpen(false)
     await loadHistory(1)
     await openDetails(created.purchaseId)
