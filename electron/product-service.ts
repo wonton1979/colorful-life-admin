@@ -1,6 +1,6 @@
 import type { AuthService } from './auth-service.js'
 import { colorfulLifeCategoryOptions } from './product-contract.js'
-import type { AdminLegoProduct, AdminLegoProductPage, AdminProductListing, BackendCategory, CatalogueArtwork, ColorfulLifeCategory, CreateProductRequest, ImageUploadPayload, ProductCataloguePage, ProductImage, ProductListing, UsedOfferCreateInput, UsedOfferCreated, UsedOfferStatus } from './product-contract.js'
+import type { AdminLegoProduct, AdminLegoProductDetails, AdminLegoProductPage, AdminProductListing, BackendCategory, CatalogueArtwork, ColorfulLifeCategory, CreateProductRequest, ImageUploadPayload, ProductCataloguePage, ProductImage, ProductListing, ProductMetadataUpdate, UsedOfferCreateInput, UsedOfferCreated, UsedOfferStatus } from './product-contract.js'
 
 export type ProductErrorCode = 'validation' | 'conflict' | 'not-found' | 'limit' | 'forbidden' | 'server' | 'malformed-response'
 
@@ -45,7 +45,7 @@ const errorMessage = async (response: Response, fallback: string): Promise<strin
   return fallback
 }
 
-const errorForResponse = async (response: Response, operation: 'create' | 'upload' | 'catalogue' | 'feature' | 'list' | 'lookup' | 'used'): Promise<ProductError> => {
+const errorForResponse = async (response: Response, operation: 'create' | 'update' | 'upload' | 'catalogue' | 'feature' | 'list' | 'lookup' | 'used'): Promise<ProductError> => {
   const message = await errorMessage(response, 'The Colorful Life service could not complete this request.')
   if (response.status === 403) return new ProductError('forbidden', 'This account cannot manage products.', response.status)
   if (response.status === 404) return new ProductError('not-found', operation === 'upload' || operation === 'catalogue' || operation === 'feature' ? 'The LEGO product could not be found.' : message, response.status)
@@ -187,6 +187,30 @@ const parseUploadResponse = (value: unknown): ProductImage => {
   return parseProductImage(value.image)
 }
 
+const parseAdminLegoProductDetails = (value: unknown, productId: number): AdminLegoProductDetails => {
+  if (!isRecord(value) || value.id !== productId || !isNumber(value.id) || !Number.isInteger(value.id) || value.id <= 0 ||
+    !isString(value.setNumber) || !isString(value.title) || (!isString(value.description) && value.description !== null) ||
+    !isString(value.theme) || !isString(value.ageRecommendation) || !isNumber(value.pieceCount) || !Number.isInteger(value.pieceCount) || value.pieceCount <= 0 ||
+    typeof value.isRetired !== 'boolean' || !isNumber(value.categoryId) || !Number.isInteger(value.categoryId) || value.categoryId <= 0 || !Array.isArray(value.productImages)) {
+    throw new ProductError('malformed-response', 'The server returned an invalid updated product response.')
+  }
+  const category = parseCategory(value.category)
+  if (category && category.id !== value.categoryId) throw new ProductError('malformed-response', 'The server returned an inconsistent updated product category.')
+  return {
+    id: value.id,
+    setNumber: value.setNumber,
+    title: value.title,
+    description: value.description,
+    theme: value.theme,
+    ageRecommendation: value.ageRecommendation,
+    pieceCount: value.pieceCount,
+    isRetired: value.isRetired,
+    categoryId: value.categoryId,
+    category,
+    productImages: value.productImages.map(image => parseProductImage(image, productId)),
+  }
+}
+
 const parseCatalogueArtworkResponse = (value: unknown): CatalogueArtwork => {
   if (!isRecord(value) || !isRecord(value.catalogueArtwork) || !isString(value.catalogueArtwork.url) || !isString(value.catalogueArtwork.publicId)) {
     throw new ProductError('malformed-response', 'The server returned an invalid catalogue artwork response.')
@@ -248,6 +272,14 @@ export class ProductService {
       throw new ProductError('malformed-response', 'The server returned an incomplete Admin product listing collection.')
     }
     return listings
+  }
+
+  async updateProductMetadata(productId: number, update: ProductMetadataUpdate): Promise<AdminLegoProductDetails> {
+    const response = await this.authService.authenticatedFetch(`/admin/products/${productId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(update),
+    })
+    if (!response.ok) throw await errorForResponse(response, 'update')
+    return parseAdminLegoProductDetails(await response.json(), productId)
   }
 
   async searchLegoProducts(query: string, page = 1, pageSize = 20): Promise<AdminLegoProductPage> {
@@ -360,4 +392,21 @@ export const isCreateProductRequest = (value: unknown): value is CreateProductRe
   const salePrice = value.salePrice
   const currentStock = value.currentStock
   return (value.description === undefined || isString(value.description)) && (value.isRetired === undefined || typeof value.isRetired === 'boolean') && (salePrice === undefined || (isNumber(salePrice) && salePrice >= 0)) && (currentStock === undefined || (typeof currentStock === 'number' && Number.isInteger(currentStock) && currentStock >= 0))
+}
+
+const metadataUpdateKeys = new Set(['setNumber', 'title', 'description', 'theme', 'ageRecommendation', 'pieceCount', 'isRetired', 'categoryId'])
+
+export const isProductMetadataUpdate = (value: unknown): value is ProductMetadataUpdate => {
+  if (!isRecord(value)) return false
+  const keys = Object.keys(value)
+  if (keys.length === 0 || keys.some(key => !metadataUpdateKeys.has(key))) return false
+  if (value.setNumber !== undefined && (!isString(value.setNumber) || value.setNumber.trim().length === 0)) return false
+  if (value.title !== undefined && (!isString(value.title) || value.title.trim().length === 0)) return false
+  if (value.description !== undefined && !isString(value.description)) return false
+  if (value.theme !== undefined && (!isString(value.theme) || value.theme.trim().length === 0)) return false
+  if (value.ageRecommendation !== undefined && (!isString(value.ageRecommendation) || value.ageRecommendation.trim().length === 0)) return false
+  if (value.pieceCount !== undefined && (!isNumber(value.pieceCount) || !Number.isInteger(value.pieceCount) || value.pieceCount <= 0)) return false
+  if (value.isRetired !== undefined && typeof value.isRetired !== 'boolean') return false
+  if (value.categoryId !== undefined && (!isNumber(value.categoryId) || !Number.isInteger(value.categoryId) || value.categoryId <= 0)) return false
+  return true
 }

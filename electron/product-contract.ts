@@ -133,6 +133,32 @@ export interface AdminLegoProductPage {
   pagination: ProductCataloguePage['pagination']
 }
 
+export interface ProductMetadataUpdate {
+  setNumber?: string
+  title?: string
+  description?: string
+  theme?: string
+  ageRecommendation?: string
+  pieceCount?: number
+  isRetired?: boolean
+  categoryId?: number
+}
+
+/** Updated shared catalogue data returned by PATCH /admin/products/:productId. */
+export interface AdminLegoProductDetails {
+  id: number
+  setNumber: string
+  title: string
+  description: string | null
+  theme: string
+  ageRecommendation: string
+  pieceCount: number
+  isRetired: boolean
+  categoryId: number
+  category: BackendCategory | null
+  productImages: ProductImage[]
+}
+
 export interface UsedConditionPhoto {
   bytes: Uint8Array
   filename: string
@@ -160,6 +186,7 @@ export interface AdminProductsApi {
   createProduct(request: CreateProductRequest): Promise<ProductListing>
   listProducts(): Promise<ProductListing[]>
   listAdminProductListings(): Promise<AdminProductListing[]>
+  updateProductMetadata(productId: number, update: ProductMetadataUpdate): Promise<AdminLegoProductDetails>
   listProductImages(productId: number): Promise<ProductImage[]>
   uploadProductImage(productId: number, image: ImageUploadPayload): Promise<ProductImage>
   reorderProductImages(productId: number, imageIds: number[]): Promise<ProductImage[]>

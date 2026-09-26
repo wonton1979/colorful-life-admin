@@ -16,6 +16,7 @@ describe('CataloguePresentation', () => {
   beforeEach(() => {
     window.adminProducts = {
       createProduct: vi.fn(), listProductImages: vi.fn().mockResolvedValue([]), uploadProductImage: vi.fn(), reorderProductImages: vi.fn().mockResolvedValue([]), updateProductImageAltText: vi.fn(), deleteProductImage: vi.fn(), setFeatureProduct: vi.fn().mockResolvedValue({ id: 102, isFeatureProduct: true }),
+      updateProductMetadata: vi.fn(),
       uploadCatalogueArtwork: vi.fn().mockResolvedValue({ url: 'https://cdn.example/new-artwork.jpg', publicId: 'stored-1' }), removeCatalogueArtwork: vi.fn().mockResolvedValue(undefined),
       listProducts: vi.fn(), listAdminProductListings: vi.fn().mockResolvedValue([makeListing(1, true, 'https://cdn.example/current.jpg'), makeListing(2)]),
       searchLegoProducts: vi.fn().mockResolvedValue({ items: [], pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 } }), createUsedOffer: vi.fn(),

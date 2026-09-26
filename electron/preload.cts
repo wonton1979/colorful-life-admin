@@ -17,6 +17,7 @@ const adminProducts: AdminProductsApi = {
   createProduct: (request) => ipcRenderer.invoke('admin-products:create', request),
   listProducts: () => ipcRenderer.invoke('admin-products:list'),
   listAdminProductListings: () => ipcRenderer.invoke('admin-products:list-admin-product-listings'),
+  updateProductMetadata: (productId, update) => ipcRenderer.invoke('admin-products:update-metadata', productId, update),
   listProductImages: (productId) => ipcRenderer.invoke('admin-products:list-product-images', productId),
   uploadProductImage: (productId, image) => ipcRenderer.invoke('admin-products:upload-image', productId, image),
   reorderProductImages: (productId, imageIds) => ipcRenderer.invoke('admin-products:reorder-product-images', productId, imageIds),
