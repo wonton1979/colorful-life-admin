@@ -11,6 +11,7 @@ beforeEach(() => {
     createManual: vi.fn(), importPdf: vi.fn(), list: vi.fn(), get: vi.fn(), review: vi.fn().mockResolvedValue(review()),
     amend: vi.fn().mockResolvedValue(review()), resolve: vi.fn().mockResolvedValue(review()),
     receive: vi.fn().mockResolvedValue(review()), searchProducts: vi.fn().mockResolvedValue([]), createListing: vi.fn(),
+    purchaseAnalyticsSummary: vi.fn(), supplierMonthlyAnalytics: vi.fn(),
   }
   window.adminProducts = { createProduct: vi.fn(), listProducts: vi.fn().mockResolvedValue([]), listAdminProductListings: vi.fn().mockResolvedValue([]), updateProductMetadata: vi.fn(), listProductImages: vi.fn().mockResolvedValue([]), uploadProductImage: vi.fn(), reorderProductImages: vi.fn().mockResolvedValue([]), updateProductImageAltText: vi.fn(), deleteProductImage: vi.fn(),
     setFeatureProduct: vi.fn(), uploadCatalogueArtwork: vi.fn(), removeCatalogueArtwork: vi.fn(), searchLegoProducts: vi.fn().mockResolvedValue({ items: [], pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 } }), createUsedOffer: vi.fn() }

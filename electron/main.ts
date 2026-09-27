@@ -135,6 +135,10 @@ const validatePurchaseId = (purchaseId: unknown): number => {
   if (typeof purchaseId !== 'number' || !Number.isInteger(purchaseId) || purchaseId <= 0) throw new PurchaseError('validation', 'Invalid purchase.')
   return purchaseId
 }
+const validateSupplierKey = (supplierKey: unknown): string => {
+  if (typeof supplierKey !== 'string' || supplierKey.trim() === '' || supplierKey.length > 200) throw new PurchaseError('validation', 'Invalid supplier selection.')
+  return supplierKey
+}
 const validatePage = (value: unknown, fallback: number): number => value === undefined ? fallback : typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : (() => { throw new PurchaseError('validation', 'Invalid purchase history page.') })()
 const validateLimit = (value: unknown, fallback: number): number => value === undefined ? fallback : typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 100 ? value : (() => { throw new PurchaseError('validation', 'Invalid purchase history limit.') })()
 
@@ -149,6 +153,8 @@ handleIpc('admin-purchases:import-pdf', async (_event, file: unknown) => purchas
 handleIpc('admin-purchases:create-manual', (_event, input: unknown) => purchaseService.createManual(input as ManualPurchaseInput))
 handleIpc('admin-purchases:list', async (_event, page: unknown, limit: unknown) => purchaseService.list(validatePage(page, 1), validateLimit(limit, 20)))
 handleIpc('admin-purchases:get', async (_event, purchaseId: unknown) => purchaseService.get(validatePurchaseId(purchaseId)))
+handleIpc('admin-purchases:analytics-summary', () => purchaseService.purchaseAnalyticsSummary())
+handleIpc('admin-purchases:supplier-monthly-analytics', (_event, supplierKey: unknown) => purchaseService.supplierMonthlyAnalytics(validateSupplierKey(supplierKey)))
 handleIpc('admin-purchases:review', (_event, id: unknown) => purchaseService.review(validatePurchaseId(id)))
 handleIpc('admin-purchases:amend', (_event, id: unknown, itemId: unknown, input: unknown) => purchaseService.amend(validatePurchaseId(id), validatePurchaseId(itemId), validateAmendment(input)))
 handleIpc('admin-purchases:resolve', (_event, id: unknown, groupId: unknown, input: unknown) => purchaseService.resolve(validatePurchaseId(id), validatePurchaseId(groupId), validateResolution(input)))
