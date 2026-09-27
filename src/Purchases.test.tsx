@@ -20,11 +20,11 @@ const historyRow = (id: number, sourceOrderReference: string, importHash: string
     finalTotalPaid: '10.00', createdAt: purchase.createdAt, updatedAt: purchase.updatedAt,
   }],
 })
-const reviewState = (purchase: Purchase, state: 'UNRESOLVED' | 'MATCHED'): Review => ({
+const reviewState = (purchase: Purchase, state: 'UNRESOLVED' | 'MATCHED' | 'EXCLUDED'): Review => ({
   purchase,
   revision: 'a'.repeat(64),
   totalCost: '10.00',
-  groups: [{ state, lines: [{ purchaseDocumentId: purchase.purchaseDocuments[0].id }] }],
+  groups: [{ state, inventoryDisposition: state === 'EXCLUDED' ? 'NON_INVENTORY' : 'INVENTORY', lines: [{ purchaseDocumentId: purchase.purchaseDocuments[0].id, productListingId: null }] }],
 } as unknown as Review)
 
 describe('Purchases', () => {
@@ -35,7 +35,7 @@ describe('Purchases', () => {
       getManualSupplierOptions: vi.fn().mockResolvedValue(supplierOptions),
       createManual: vi.fn().mockResolvedValue({ purchaseId: purchase.id, documentId: 4 }),
       review: vi.fn().mockResolvedValue({ purchase, revision: 'a'.repeat(64), totalCost: '0.00', groups: [] }),
-      amend: vi.fn(), resolve: vi.fn(), receive: vi.fn(), searchProducts: vi.fn(), createListing: vi.fn(),
+      amend: vi.fn(), resolve: vi.fn(), setInventoryDisposition: vi.fn(), receive: vi.fn(), searchProducts: vi.fn(), createListing: vi.fn(),
       importPdf: vi.fn().mockResolvedValue({ message: 'Purchase invoice imported successfully', importHash: 'hash' }),
       list: vi.fn().mockResolvedValue({ purchases: [purchase], pagination: { page: 1, limit: 20, total: 1, totalPages: 1 } }),
       get: vi.fn().mockResolvedValue(purchase),
@@ -306,5 +306,17 @@ describe('Purchases', () => {
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'View details' }))
     expect(await screen.findByRole('heading', { name: 'ORDER-1' })).toBeInTheDocument()
     expect(window.adminPurchases.review).toHaveBeenLastCalledWith(9)
+  })
+
+  it('does not treat an explicitly excluded item with no listing as unresolved inventory work', async () => {
+    const excludedPurchase = historyRow(12, 'MANUAL-GENERAL-ITEMS', 'manual:excluded-12')
+    vi.mocked(window.adminPurchases.list).mockResolvedValueOnce({
+      purchases: [excludedPurchase], pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+    })
+    vi.mocked(window.adminPurchases.review).mockResolvedValueOnce(reviewState(excludedPurchase, 'EXCLUDED'))
+    render(<Purchases />)
+
+    expect(await screen.findByText('MANUAL-GENERAL-ITEMS')).toBeInTheDocument()
+    expect(screen.queryByText('WAITING FOR REVIEW')).not.toBeInTheDocument()
   })
 })

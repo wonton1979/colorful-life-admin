@@ -1,6 +1,6 @@
 import type { AuthService } from './auth-service.js'
 import type { AdminPurchasesApi, ManualPurchaseCreated, ManualPurchaseInput, ManualPurchaseSupplierOptions, Purchase, PurchaseAnalyticsSummary, PurchaseDocument, PurchaseImportResult, PurchaseItem, PurchasePage, SupplierMonthlyPurchaseAnalytics } from './purchase-contract.js'
-import type { PurchaseReview, ReviewGroup, PurchaseAmendment, ReviewProduct, ReviewListingCreation } from './purchase-contract.js'
+import type { PurchaseReview, ReviewGroup, PurchaseAmendment, ReviewProduct, ReviewListingCreation, InventoryDispositionInput } from './purchase-contract.js'
 import { parseProduct } from './product-service.js'
 import { readBackendError } from './backend-error.js'
 
@@ -91,11 +91,11 @@ const parseSupplierMonthlyAnalytics = (value: unknown): SupplierMonthlyPurchaseA
 }
 
 const parseItem = (value: unknown): PurchaseItem => {
-  if (!isRecord(value) || !isNumber(value.id) || (!isNumber(value.productListingId) && value.productListingId !== null) || !isNullableString(value.externalProductId) || !isString(value.sourceDescription) || !isNullableString(value.sourceSetNumber) || (!isNumber(value.sourceLineNumber) && value.sourceLineNumber !== null) || !isNumber(value.quantity)) throw new PurchaseError('malformed-response', 'The server returned an invalid purchase item.')
+  if (!isRecord(value) || !isNumber(value.id) || (!isNumber(value.productListingId) && value.productListingId !== null) || !['INVENTORY', 'NON_INVENTORY'].includes(String(value.inventoryDisposition)) || !isNullableString(value.externalProductId) || !isString(value.sourceDescription) || !isNullableString(value.sourceSetNumber) || (!isNumber(value.sourceLineNumber) && value.sourceLineNumber !== null) || !isNumber(value.quantity)) throw new PurchaseError('malformed-response', 'The server returned an invalid purchase item.')
   const money = ['originalGrossUnitCost', 'originalGrossLineTotal', 'allocatedShipping', 'allocatedDiscount', 'finalLineCost', 'finalUnitCost']
   const values = Object.fromEntries(money.map((field) => [field, decimal(value[field])]))
   if (Object.values(values).some((entry) => entry === null) || (!isNullableString(value.receivedAt)) || (!isNullableString(value.returnedAt))) throw new PurchaseError('malformed-response', 'The server returned an invalid purchase item.')
-  return { id: value.id, productListingId: value.productListingId, externalProductId: value.externalProductId, sourceDescription: value.sourceDescription, sourceSetNumber: value.sourceSetNumber, sourceLineNumber: value.sourceLineNumber, quantity: value.quantity, originalGrossUnitCost: values.originalGrossUnitCost!, originalGrossLineTotal: values.originalGrossLineTotal!, allocatedShipping: values.allocatedShipping!, allocatedDiscount: values.allocatedDiscount!, finalLineCost: values.finalLineCost!, finalUnitCost: values.finalUnitCost!, receivedAt: value.receivedAt, returnedAt: value.returnedAt }
+  return { id: value.id, productListingId: value.productListingId, inventoryDisposition: value.inventoryDisposition as PurchaseItem['inventoryDisposition'], externalProductId: value.externalProductId, sourceDescription: value.sourceDescription, sourceSetNumber: value.sourceSetNumber, sourceLineNumber: value.sourceLineNumber, quantity: value.quantity, originalGrossUnitCost: values.originalGrossUnitCost!, originalGrossLineTotal: values.originalGrossLineTotal!, allocatedShipping: values.allocatedShipping!, allocatedDiscount: values.allocatedDiscount!, finalLineCost: values.finalLineCost!, finalUnitCost: values.finalUnitCost!, receivedAt: value.receivedAt, returnedAt: value.returnedAt }
 }
 
 const parseDocument = (value: unknown, requireItems = false): PurchaseDocument => {
@@ -206,6 +206,9 @@ export class PurchaseService implements AdminPurchasesApi {
   receive(purchaseId: number, groupId: number, input: { revision: string }) {
     return this.reviewRequest(purchaseId, `/groups/${groupId}/receive`, 'POST', input)
   }
+  setInventoryDisposition(purchaseId: number, groupId: number, input: InventoryDispositionInput) {
+    return this.reviewRequest(purchaseId, `/groups/${groupId}/disposition`, 'PATCH', validateInventoryDisposition(input))
+  }
   async searchProducts(purchaseId: number, query: string): Promise<ReviewProduct[]> {
     const response = await this.auth.authenticatedFetch(`/purchases/${purchaseId}/review/products?q=${encodeURIComponent(query)}`)
     if (!response.ok) throw await responseError(response)
@@ -271,7 +274,8 @@ export function parseReview(value: unknown): PurchaseReview {
       !isString(g.description) || !isNullableString(g.externalProductId) || !isNullableString(g.sourceSetNumber) ||
       !positiveId(g.quantity) || !isNumber(g.pendingQuantity) || !Number.isInteger(g.pendingQuantity) || g.pendingQuantity < 0 || g.pendingQuantity > g.quantity ||
       !moneyString(g.totalCost) || !moneyString(g.unitCost) || (g.costKind !== 'UNIT' && g.costKind !== 'WEIGHTED_AVERAGE') ||
-      !['UNRESOLVED', 'MATCHED', 'RECEIVED'].includes(String(g.state)) || typeof g.canResolve !== 'boolean' || !Array.isArray(g.lines)) throw malformedReview()
+      !['UNRESOLVED', 'MATCHED', 'RECEIVED', 'EXCLUDED'].includes(String(g.state)) ||
+      !['INVENTORY', 'NON_INVENTORY', 'MIXED'].includes(String(g.inventoryDisposition)) || typeof g.canResolve !== 'boolean' || !Array.isArray(g.lines)) throw malformedReview()
     let listing: ReviewGroup['listing'] = null
     if (g.listing !== null) {
       if (!isRecord(g.listing) || (g.listing.condition !== 'NEW' && g.listing.condition !== 'USED_LIKE_NEW') || typeof g.listing.active !== 'boolean') throw malformedReview()
@@ -286,7 +290,7 @@ export function parseReview(value: unknown): PurchaseReview {
       lines.reduce((n, l) => n + l.quantity, 0) !== g.quantity) throw malformedReview()
     return { id: g.id, sourceItemIds: g.sourceItemIds, description: g.description, externalProductId: g.externalProductId,
       sourceSetNumber: g.sourceSetNumber, quantity: g.quantity, pendingQuantity: g.pendingQuantity, totalCost: g.totalCost,
-      unitCost: g.unitCost, costKind: g.costKind, listing, state: g.state as ReviewGroup['state'], canResolve: g.canResolve, lines }
+      unitCost: g.unitCost, costKind: g.costKind, listing, state: g.state as ReviewGroup['state'], inventoryDisposition: g.inventoryDisposition as ReviewGroup['inventoryDisposition'], canResolve: g.canResolve, lines }
   })
   return { purchase, revision: value.revision, totalCost: value.totalCost, groups }
 }
@@ -315,6 +319,14 @@ export function validateResolution(value: unknown) {
   if (!isRecord(value) || Object.keys(value).some(k => !['revision', 'productListingId'].includes(k)) ||
     (value.productListingId !== null && !positiveId(value.productListingId))) throw new PurchaseError('validation', 'Invalid listing selection')
   return { ...revision, productListingId: value.productListingId }
+}
+export function validateInventoryDisposition(value: unknown): InventoryDispositionInput {
+  const revision = validateReviewInput(value)
+  if (!isRecord(value) || Object.keys(value).some(k => !['revision', 'inventoryDisposition'].includes(k)) ||
+    (value.inventoryDisposition !== 'INVENTORY' && value.inventoryDisposition !== 'NON_INVENTORY')) {
+    throw new PurchaseError('validation', 'Invalid inventory disposition')
+  }
+  return { ...revision, inventoryDisposition: value.inventoryDisposition }
 }
 export function validateListingCreation(value: unknown): ReviewListingCreation {
   if (!isRecord(value) || value.currentStock !== 0 || (value.condition !== 'NEW' && value.condition !== 'USED_LIKE_NEW') ||

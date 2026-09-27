@@ -3,6 +3,7 @@
 .review-toolbar, .review-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .review-toolbar { margin-bottom: 18px; }
 .review-actions { margin: 16px 0; }
+.review-disposition { display: inline-block; padding: 3px 8px; border: 1px solid #e7c8a5; border-radius: 999px; color: #8b4c19; background: #fff7ed; font-size: 12px; font-weight: 700; }
 .purchase-review .button { margin-top: 0; }
 .review-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 16px 0; }
 .review-facts span { display: grid; gap: 6px; }

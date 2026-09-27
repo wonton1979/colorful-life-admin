@@ -19,8 +19,8 @@ const response = {
   createdAt: '2026-09-20T00:00:00.000Z', updatedAt: '2026-09-20T00:00:00.000Z',
   purchase: { id: 17, sourceOrderReference: 'ORDER-17' },
   purchaseItems: [
-    { id: 1, productListingId: null, externalProductId: null, sourceDescription: 'Set one', sourceSetNumber: '12345', sourceLineNumber: null, quantity: 2, originalGrossUnitCost: '10.00', originalGrossLineTotal: '20.00', allocatedShipping: '1.45', allocatedDiscount: '1.09', finalLineCost: '20.36', finalUnitCost: '10.180000', receivedAt: null, returnedAt: null },
-    { id: 2, productListingId: null, externalProductId: null, sourceDescription: 'Set two', sourceSetNumber: null, sourceLineNumber: null, quantity: 1, originalGrossUnitCost: '7.50', originalGrossLineTotal: '7.50', allocatedShipping: '0.55', allocatedDiscount: '0.41', finalLineCost: '7.64', finalUnitCost: '7.640000', receivedAt: null, returnedAt: null },
+    { id: 1, productListingId: null, inventoryDisposition: 'INVENTORY', externalProductId: null, sourceDescription: 'Set one', sourceSetNumber: '12345', sourceLineNumber: null, quantity: 2, originalGrossUnitCost: '10.00', originalGrossLineTotal: '20.00', allocatedShipping: '1.45', allocatedDiscount: '1.09', finalLineCost: '20.36', finalUnitCost: '10.180000', receivedAt: null, returnedAt: null },
+    { id: 2, productListingId: null, inventoryDisposition: 'INVENTORY', externalProductId: null, sourceDescription: 'Set two', sourceSetNumber: null, sourceLineNumber: null, quantity: 1, originalGrossUnitCost: '7.50', originalGrossLineTotal: '7.50', allocatedShipping: '0.55', allocatedDiscount: '0.41', finalLineCost: '7.64', finalUnitCost: '7.640000', receivedAt: null, returnedAt: null },
   ],
 }
 

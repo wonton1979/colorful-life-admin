@@ -1,6 +1,7 @@
 export interface PurchaseItem {
   id: number
   productListingId: number | null
+  inventoryDisposition: 'INVENTORY' | 'NON_INVENTORY'
   externalProductId: string | null
   sourceDescription: string
   sourceSetNumber: string | null
@@ -108,6 +109,7 @@ export interface AdminPurchasesApi {
   review(purchaseId: number): Promise<PurchaseReview>
   amend(purchaseId: number, itemId: number, input: PurchaseAmendment): Promise<PurchaseReview>
   resolve(purchaseId: number, groupId: number, input: { revision: string; productListingId: number | null }): Promise<PurchaseReview>
+  setInventoryDisposition(purchaseId: number, groupId: number, input: InventoryDispositionInput): Promise<PurchaseReview>
   receive(purchaseId: number, groupId: number, input: { revision: string }): Promise<PurchaseReview>
   searchProducts(purchaseId: number, query: string): Promise<ReviewProduct[]>
   createListing(purchaseId: number, input: ReviewListingCreation): Promise<import('./product-contract.js').ProductListing>
@@ -128,6 +130,10 @@ export interface PurchaseAmendment {
   revision: string; sourceDescription: string; sourceSetNumber: string | null
   quantity?: number; originalGrossUnitCost?: string
 }
+export interface InventoryDispositionInput {
+  revision: string
+  inventoryDisposition: 'INVENTORY' | 'NON_INVENTORY'
+}
 export interface ReviewLine extends PurchaseItem {
   purchaseDocumentId: number; canAmend: boolean; canAmendCost: boolean
 }
@@ -137,7 +143,9 @@ export interface ReviewGroup {
   quantity: number; pendingQuantity: number; totalCost: string; unitCost: string
   costKind: 'UNIT' | 'WEIGHTED_AVERAGE'
   listing: (ReviewProduct & { condition: 'NEW' | 'USED_LIKE_NEW'; active: boolean }) | null
-  state: 'UNRESOLVED' | 'MATCHED' | 'RECEIVED'; canResolve: boolean; lines: ReviewLine[]
+  state: 'UNRESOLVED' | 'MATCHED' | 'RECEIVED' | 'EXCLUDED';
+  inventoryDisposition: 'INVENTORY' | 'NON_INVENTORY' | 'MIXED'
+  canResolve: boolean; lines: ReviewLine[]
 }
 export interface PurchaseReview {
   purchase: Purchase; revision: string; totalCost: string; groups: ReviewGroup[]
