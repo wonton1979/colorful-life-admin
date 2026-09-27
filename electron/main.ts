@@ -150,6 +150,7 @@ const validatePdf = (file: unknown): { bytes: Uint8Array; filename: string; mime
 }
 
 handleIpc('admin-purchases:import-pdf', async (_event, file: unknown) => purchaseService.importPdf(validatePdf(file)))
+handleIpc('admin-purchases:manual-supplier-options', () => purchaseService.getManualSupplierOptions())
 handleIpc('admin-purchases:create-manual', (_event, input: unknown) => purchaseService.createManual(input as ManualPurchaseInput))
 handleIpc('admin-purchases:list', async (_event, page: unknown, limit: unknown) => purchaseService.list(validatePage(page, 1), validateLimit(limit, 20)))
 handleIpc('admin-purchases:get', async (_event, purchaseId: unknown) => purchaseService.get(validatePurchaseId(purchaseId)))

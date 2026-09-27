@@ -29,6 +29,7 @@ describe('Purchase Analytics', () => {
 
   beforeEach(() => {
     window.adminPurchases = {
+      getManualSupplierOptions: vi.fn(),
       purchaseAnalyticsSummary: vi.fn().mockResolvedValue(summary),
       supplierMonthlyAnalytics: vi.fn().mockResolvedValue(monthly),
     } as unknown as AdminPurchasesApi

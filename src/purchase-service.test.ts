@@ -8,6 +8,49 @@ const purchase = { id: 3, sourceOrderReference: 'ORDER-1', sourceOrderDate: '202
 const historyPurchase = { ...purchase, purchaseDocuments: [{ ...document, purchaseItems: undefined }] }
 
 describe('PurchaseService', () => {
+  it('requests and maps backend-owned manual supplier options through the authenticated purchase client', async () => {
+    const options = { canonicalSuppliers: ["Sainsbury's", 'eBay', 'B&M'], customSupplierOption: 'Others' }
+    const authenticatedFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(options), { status: 200 }))
+    const service = new PurchaseService({ authenticatedFetch } as unknown as AuthService)
+
+    await expect(service.getManualSupplierOptions()).resolves.toEqual(options)
+    expect(authenticatedFetch).toHaveBeenCalledWith('/purchases/manual-supplier-options')
+  })
+
+  it('preserves supplier-options FORBIDDEN and SESSION_INVALID service errors', async () => {
+    const authenticatedFetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'FORBIDDEN', message: 'Admin access required' } }), { status: 403 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'SESSION_INVALID', message: 'Session invalid' } }), { status: 401 }))
+    const service = new PurchaseService({ authenticatedFetch } as unknown as AuthService)
+
+    await expect(service.getManualSupplierOptions()).rejects.toMatchObject({ code: 'forbidden', backendCode: 'FORBIDDEN', status: 403 } satisfies Partial<PurchaseError>)
+    await expect(service.getManualSupplierOptions()).rejects.toMatchObject({ code: 'session-invalid', backendCode: 'SESSION_INVALID', status: 401 } satisfies Partial<PurchaseError>)
+  })
+
+  it('keeps manual supplier-options SESSION_INVALID on the centralized AuthService renewal path', async () => {
+    const expiry = '2099-01-01T00:00:00.000Z'
+    const options = { canonicalSuppliers: ['Backend choice'], customSupplierOption: 'Others' }
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ token: 'old-access', accessTokenExpiresAt: expiry, refreshToken: 'old-refresh', refreshExpiresAt: expiry }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 7, email: 'admin@example.test', role: 'ADMIN', createdAt: expiry, updatedAt: expiry }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'SESSION_INVALID', message: 'Session invalid' } }), { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ token: 'new-access', accessTokenExpiresAt: expiry, refreshToken: 'new-refresh', refreshExpiresAt: expiry }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(options), { status: 200 }))
+    const auth = new AuthService('https://api.example.test', fetcher)
+    await auth.login({ email: 'admin@example.test', password: 'password' })
+    const service = new PurchaseService(auth)
+
+    await expect(service.getManualSupplierOptions()).resolves.toEqual(options)
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      'https://api.example.test/auth/login',
+      'https://api.example.test/profile',
+      'https://api.example.test/purchases/manual-supplier-options',
+      'https://api.example.test/auth/refresh',
+      'https://api.example.test/purchases/manual-supplier-options',
+    ])
+    expect(new Headers(fetcher.mock.calls[4][1]?.headers).get('Authorization')).toBe('Bearer new-access')
+  })
+
   it('posts one multipart PDF and parses the import response', async () => {
     const authenticatedFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ message: 'Purchase invoice imported successfully', importHash: 'abc' }), { status: 201 }))
     const service = new PurchaseService({ authenticatedFetch } as unknown as AuthService)

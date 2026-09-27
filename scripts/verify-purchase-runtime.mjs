@@ -28,6 +28,7 @@ const server = createServer(async (req, res) => {
   else if (req.url === '/profile') data = { id: 1, email: 'runtime@test.invalid', role: 'ADMIN', createdAt: '2026-09-21', updatedAt: '2026-09-21' }
   else if (req.url.startsWith('/products?')) data = { items: [], pagination: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 } }
   else if (req.url === '/admin/categories') data = []
+  else if (req.url === '/purchases/manual-supplier-options') data = { canonicalSuppliers: ['LEGO', 'Amazon', 'eBay', 'B&M', "Sainsbury's"], customSupplierOption: 'Others' }
   else if (req.url.startsWith('/purchases?')) data = { purchases: [review.purchase], pagination: { page: 1, limit: 20, total: 1, totalPages: 1 } }
   else if (req.url === '/purchases/1/review' && failReview) { res.statusCode = 500; data = { error: 'Unavailable' } }
   else if (req.url === '/purchases/1/review/products?q=model') data = [{ id: 1, title: 'Display model', setNumber: '75446' }]
@@ -77,7 +78,7 @@ try {
   }
   assert.equal(window.webContents.getLastWebPreferences().contextIsolation, true)
   assert.equal(window.webContents.getLastWebPreferences().nodeIntegration, false)
-  assert.deepEqual(await js(`['review','amend','resolve','receive','searchProducts','createListing'].map(k => typeof window.adminPurchases[k])`), Array(6).fill('function'))
+  assert.deepEqual(await js(`['getManualSupplierOptions','review','amend','resolve','receive','searchProducts','createListing'].map(k => typeof window.adminPurchases[k])`), Array(7).fill('function'))
   assert.equal(await js("typeof window.require"), 'undefined')
   await until("!!document.querySelector('#email')")
   await js(`for (const [id,value] of [['email','runtime@test.invalid'],['password','test']]) {
@@ -129,9 +130,29 @@ try {
   await js("window.adminCategories.list()")
   await js("window.adminProducts.listProducts()")
   await js("window.adminPurchases.searchProducts(1,'model')")
+  assert.deepEqual(await js('window.adminPurchases.getManualSupplierOptions()'), {
+    canonicalSuppliers: ['LEGO', 'Amazon', 'eBay', 'B&M', "Sainsbury's"], customSupplierOption: 'Others',
+  })
+  await click('Add Purchase')
+  await until(`!![...document.querySelectorAll('#manual-purchase-supplier option')].some(option => option.value === "Sainsbury's")`)
+  const selectSupplier = async value => js(`(() => { const select = document.querySelector('#manual-purchase-supplier'); select.value = ${JSON.stringify(value)}; select.dispatchEvent(new Event('change',{bubbles:true})); })()`)
+  await selectSupplier('Others')
+  await until("!!document.querySelector('#manual-purchase-custom-supplier')")
+  await js("(() => { const input = document.querySelector('#manual-purchase-custom-supplier'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'Local Toy Shop'); input.dispatchEvent(new Event('input',{bubbles:true})); })()")
+  window.setSize(1200, 1000)
+  await new Promise(resolve => setTimeout(resolve, 150))
+  writeFileSync(join(folder, 'manual-purchase-custom-1200.png'), (await window.webContents.capturePage()).toPNG())
+  window.setSize(480, 1000)
+  await new Promise(resolve => setTimeout(resolve, 150))
+  const geometry = await js("({width:innerWidth,scroll:document.documentElement.scrollWidth})")
+  assert(geometry.scroll <= geometry.width + 1, 'Add Purchase supplier selector must not overflow horizontally')
+  writeFileSync(join(folder, 'manual-purchase-custom-480.png'), (await window.webContents.capturePage()).toPNG())
+  await selectSupplier('LEGO')
+  assert.equal(await js("!!document.querySelector('#manual-purchase-custom-supplier')"), false)
   assert(requests.filter(r => r.path.startsWith('/purchases/1/review')).every(r => r.auth === 'Bearer disposable-runtime-token'))
+  assert(requests.some(r => r.path === '/purchases/manual-supplier-options' && r.auth === 'Bearer disposable-runtime-token'))
   assert(requests.some(r => r.path.endsWith('/receive')))
-  console.log('Verified compiled Electron review, amendment, resolution, receiving, refresh/failure/back, existing bridges, and responsive layout.')
+  console.log('Verified compiled Electron review, amendment, resolution, receiving, supplier options, refresh/failure/back, existing bridges, and responsive Add Purchase layout.')
   console.log('Runtime screenshots: ' + folder)
   clearTimeout(timeout)
   server.close()

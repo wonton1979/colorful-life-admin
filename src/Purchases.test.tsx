@@ -4,6 +4,12 @@ import Purchases from './Purchases'
 import type { Purchase, PurchaseReview as Review } from '../electron/purchase-contract.js'
 
 const purchase: Purchase = { id: 3, sourceOrderReference: 'ORDER-1', sourceOrderDate: '2026-09-20T00:00:00.000Z', merchantName: null, createdAt: '2026-09-20T00:00:00.000Z', updatedAt: '2026-09-20T00:00:00.000Z', purchaseDocuments: [] }
+const supplierOptions = { canonicalSuppliers: ['LEGO', 'Amazon', 'eBay', 'B&M', "Sainsbury's"], customSupplierOption: 'Others' }
+const fillMinimalPurchase = () => {
+  fireEvent.change(screen.getByLabelText('Purchase reference *'), { target: { value: 'ORDER-17' } })
+  fireEvent.change(screen.getByLabelText('Description *'), { target: { value: 'Technic set' } })
+  fireEvent.change(screen.getByLabelText('Unit cost (£) *'), { target: { value: '10.00' } })
+}
 const historyRow = (id: number, sourceOrderReference: string, importHash: string): Purchase => ({
   ...purchase,
   id,
@@ -25,7 +31,17 @@ describe('Purchases', () => {
   afterEach(() => cleanup())
 
   beforeEach(() => {
-    window.adminPurchases = { createManual: vi.fn().mockResolvedValue({ purchaseId: purchase.id, documentId: 4 }), review: vi.fn().mockResolvedValue({ purchase, revision: 'a'.repeat(64), totalCost: '0.00', groups: [] }), amend: vi.fn(), resolve: vi.fn(), receive: vi.fn(), searchProducts: vi.fn(), createListing: vi.fn(), importPdf: vi.fn().mockResolvedValue({ message: 'Purchase invoice imported successfully', importHash: 'hash' }), list: vi.fn().mockResolvedValue({ purchases: [purchase], pagination: { page: 1, limit: 20, total: 1, totalPages: 1 } }), get: vi.fn().mockResolvedValue(purchase), purchaseAnalyticsSummary: vi.fn().mockResolvedValue({ totalQuantity: 0, totalAmount: '0.00', suppliers: [] }), supplierMonthlyAnalytics: vi.fn().mockResolvedValue({ supplierKey: 'unknown', supplierName: 'Unknown supplier', months: [], undatedTotalAmount: '0.00' }) }
+    window.adminPurchases = {
+      getManualSupplierOptions: vi.fn().mockResolvedValue(supplierOptions),
+      createManual: vi.fn().mockResolvedValue({ purchaseId: purchase.id, documentId: 4 }),
+      review: vi.fn().mockResolvedValue({ purchase, revision: 'a'.repeat(64), totalCost: '0.00', groups: [] }),
+      amend: vi.fn(), resolve: vi.fn(), receive: vi.fn(), searchProducts: vi.fn(), createListing: vi.fn(),
+      importPdf: vi.fn().mockResolvedValue({ message: 'Purchase invoice imported successfully', importHash: 'hash' }),
+      list: vi.fn().mockResolvedValue({ purchases: [purchase], pagination: { page: 1, limit: 20, total: 1, totalPages: 1 } }),
+      get: vi.fn().mockResolvedValue(purchase),
+      purchaseAnalyticsSummary: vi.fn().mockResolvedValue({ totalQuantity: 0, totalAmount: '0.00', suppliers: [] }),
+      supplierMonthlyAnalytics: vi.fn().mockResolvedValue({ supplierKey: 'unknown', supplierName: 'Unknown supplier', months: [], undatedTotalAmount: '0.00' }),
+    }
   })
 
   it('rejects non-PDF files and imports a selected PDF', async () => {
@@ -58,11 +74,55 @@ describe('Purchases', () => {
     expect(window.adminPurchases.importPdf).not.toHaveBeenCalled()
   })
 
+  it('loads supplier options from the Electron API and does not show a fake list while loading', async () => {
+    let finish!: (value: typeof supplierOptions) => void
+    vi.mocked(window.adminPurchases.getManualSupplierOptions).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    render(<Purchases />)
+    fireEvent.click(screen.getByRole('button', { name: 'Add Purchase' }))
+
+    const select = screen.getByLabelText('Supplier / Retailer')
+    expect(select).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading supplier options')
+    expect(within(select).queryByRole('option', { name: 'LEGO' })).not.toBeInTheDocument()
+    expect(window.adminPurchases.getManualSupplierOptions).toHaveBeenCalledTimes(1)
+
+    finish(supplierOptions)
+    expect(await screen.findByRole('option', { name: "Sainsbury's" })).toBeInTheDocument()
+    expect(select).toBeEnabled()
+  })
+
+  it('shows supplier-options load failures and retries through the Electron API', async () => {
+    vi.mocked(window.adminPurchases.getManualSupplierOptions)
+      .mockRejectedValueOnce(new Error('Supplier options are temporarily unavailable.'))
+      .mockResolvedValueOnce(supplierOptions)
+    render(<Purchases />)
+    fireEvent.click(screen.getByRole('button', { name: 'Add Purchase' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Supplier options are temporarily unavailable.')
+    fireEvent.click(screen.getByRole('button', { name: 'Retry supplier options' }))
+    expect(await screen.findByRole('option', { name: 'B&M' })).toBeInTheDocument()
+    expect(window.adminPurchases.getManualSupplierOptions).toHaveBeenCalledTimes(2)
+  })
+
+  it('renders only supplier choices returned by the backend', async () => {
+    vi.mocked(window.adminPurchases.getManualSupplierOptions).mockResolvedValueOnce({
+      canonicalSuppliers: ['Backend-provided retailer'], customSupplierOption: 'Others',
+    })
+    render(<Purchases />)
+    fireEvent.click(screen.getByRole('button', { name: 'Add Purchase' }))
+
+    const select = screen.getByLabelText('Supplier / Retailer')
+    expect(await screen.findByRole('option', { name: 'Backend-provided retailer' })).toBeInTheDocument()
+    expect(within(select).queryByRole('option', { name: 'LEGO' })).not.toBeInTheDocument()
+    expect(within(select).getByRole('option', { name: 'Others' })).toBeInTheDocument()
+  })
+
   it('creates a purchase with pound totals and opens it in the existing Purchase Review flow', async () => {
     render(<Purchases />)
     fireEvent.click(screen.getByRole('button', { name: 'Add Purchase' }))
     fireEvent.change(screen.getByLabelText('Purchase reference *'), { target: { value: 'ORDER-17' } })
-    fireEvent.change(screen.getByLabelText('Supplier / Retailer'), { target: { value: 'Example Retailer' } })
+    await screen.findByRole('option', { name: "Sainsbury's" })
+    fireEvent.change(screen.getByLabelText('Supplier / Retailer'), { target: { value: "Sainsbury's" } })
     fireEvent.change(screen.getByLabelText('Shipping (£)'), { target: { value: '2.00' } })
     fireEvent.change(screen.getByLabelText('Discount (£)'), { target: { value: '1.50' } })
     fireEvent.change(screen.getByLabelText('Description *'), { target: { value: 'Technic set' } })
@@ -73,7 +133,7 @@ describe('Purchases', () => {
     expect(screen.getByText('£20.50')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Create purchase' }))
     await waitFor(() => expect(window.adminPurchases.createManual).toHaveBeenCalledWith(expect.objectContaining({
-      sourceOrderReference: 'ORDER-17', merchantName: 'Example Retailer', originalGrossMerchandiseTotal: '20.00',
+      sourceOrderReference: 'ORDER-17', merchantName: "Sainsbury's", originalGrossMerchandiseTotal: '20.00',
       shippingTotal: '2.00', discountTotal: '1.50', finalTotalPaid: '20.50',
       items: [{ sourceDescription: 'Technic set', sourceSetNumber: '42100', quantity: 2, originalGrossUnitCost: '10.00', originalGrossLineTotal: '20.00' }],
     })))
@@ -81,6 +141,65 @@ describe('Purchases', () => {
     expect(window.adminPurchases.list).toHaveBeenCalledTimes(2)
     expect(window.adminPurchases.receive).not.toHaveBeenCalled()
     expect(screen.getByRole('heading', { name: 'ORDER-1' })).toBeInTheDocument()
+  })
+
+  it.each(["Sainsbury's", 'eBay', 'B&M'])('submits the exact backend canonical supplier value %s', async supplier => {
+    render(<Purchases />)
+    fireEvent.click(screen.getByRole('button', { name: 'Add Purchase' }))
+    await screen.findByRole('option', { name: supplier })
+    fireEvent.change(screen.getByLabelText('Supplier / Retailer'), { target: { value: supplier } })
+    fillMinimalPurchase()
+    fireEvent.click(screen.getByRole('button', { name: 'Create purchase' }))
+
+    await waitFor(() => expect(window.adminPurchases.createManual).toHaveBeenCalledWith(expect.objectContaining({ merchantName: supplier })))
+  })
+
+  it('requires a meaningful custom supplier and submits its trimmed value rather than Others', async () => {
+    render(<Purchases />)
+    fireEvent.click(screen.getByRole('button', { name: 'Add Purchase' }))
+    await screen.findByRole('option', { name: 'Others' })
+    fireEvent.change(screen.getByLabelText('Supplier / Retailer'), { target: { value: 'Others' } })
+    expect(screen.getByLabelText('Other supplier / retailer')).toBeInTheDocument()
+    fillMinimalPurchase()
+    fireEvent.click(screen.getByRole('button', { name: 'Create purchase' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter the other supplier / retailer name')
+    expect(window.adminPurchases.createManual).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText('Other supplier / retailer'), { target: { value: '   ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create purchase' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter the other supplier / retailer name')
+    expect(window.adminPurchases.createManual).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText('Other supplier / retailer'), { target: { value: '  Local Toy Shop  ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create purchase' }))
+    await waitFor(() => expect(window.adminPurchases.createManual).toHaveBeenCalledWith(expect.objectContaining({ merchantName: 'Local Toy Shop' })))
+    expect(vi.mocked(window.adminPurchases.createManual).mock.calls[0][0].merchantName).not.toBe('Others')
+  })
+
+  it('discards stale custom supplier text when switching back to a predefined supplier', async () => {
+    render(<Purchases />)
+    fireEvent.click(screen.getByRole('button', { name: 'Add Purchase' }))
+    await screen.findByRole('option', { name: 'Others' })
+    fireEvent.change(screen.getByLabelText('Supplier / Retailer'), { target: { value: 'Others' } })
+    fireEvent.change(screen.getByLabelText('Other supplier / retailer'), { target: { value: 'Local Toy Shop' } })
+    fireEvent.change(screen.getByLabelText('Supplier / Retailer'), { target: { value: 'LEGO' } })
+    expect(screen.queryByLabelText('Other supplier / retailer')).not.toBeInTheDocument()
+    fillMinimalPurchase()
+    fireEvent.click(screen.getByRole('button', { name: 'Create purchase' }))
+
+    await waitFor(() => expect(window.adminPurchases.createManual).toHaveBeenCalledWith(expect.objectContaining({ merchantName: 'LEGO' })))
+    expect(vi.mocked(window.adminPurchases.createManual).mock.calls[0][0].merchantName).not.toBe('Local Toy Shop')
+  })
+
+  it('preserves optional no-supplier submission by omitting merchantName', async () => {
+    render(<Purchases />)
+    fireEvent.click(screen.getByRole('button', { name: 'Add Purchase' }))
+    await screen.findByRole('option', { name: 'B&M' })
+    fillMinimalPurchase()
+    fireEvent.click(screen.getByRole('button', { name: 'Create purchase' }))
+
+    await waitFor(() => expect(window.adminPurchases.createManual).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(window.adminPurchases.createManual).mock.calls[0][0]).not.toHaveProperty('merchantName')
   })
 
   it('supports adding and removing purchase item rows', () => {
@@ -148,31 +267,39 @@ describe('Purchases', () => {
     expect(screen.getByRole('heading', { name: 'Purchases' })).toBeInTheDocument()
   })
 
-  it('marks only unresolved imported purchases, keeps API order, and preserves View details', async () => {
+  it('shows review-state status for unresolved purchases from either origin and preserves order and View details', async () => {
     const unresolvedPdf = historyRow(9, 'PDF-UNRESOLVED', 'pdf-hash-9')
+    const unresolvedManual = historyRow(6724838930, '6724838930', 'manual:manual-hash-6724838930')
     const resolvedPdf = historyRow(7, 'PDF-RESOLVED', 'pdf-hash-7')
-    const unresolvedManual = historyRow(5, 'MANUAL-UNRESOLVED', 'manual:manual-hash-5')
+    const resolvedManual = historyRow(5, 'MANUAL-RESOLVED', 'manual:manual-hash-5')
     vi.mocked(window.adminPurchases.list).mockResolvedValueOnce({
-      purchases: [unresolvedPdf, resolvedPdf, unresolvedManual],
-      pagination: { page: 1, limit: 20, total: 3, totalPages: 1 },
+      purchases: [unresolvedPdf, unresolvedManual, resolvedPdf, resolvedManual],
+      pagination: { page: 1, limit: 20, total: 4, totalPages: 1 },
     })
-    vi.mocked(window.adminPurchases.review).mockImplementation(async (purchaseId) => purchaseId === 9
-      ? reviewState(unresolvedPdf, 'UNRESOLVED')
-      : reviewState(resolvedPdf, 'MATCHED'))
+    const reviewByPurchaseId = new Map([
+      [unresolvedPdf.id, reviewState(unresolvedPdf, 'UNRESOLVED')],
+      [unresolvedManual.id, reviewState(unresolvedManual, 'UNRESOLVED')],
+      [resolvedPdf.id, reviewState(resolvedPdf, 'MATCHED')],
+      [resolvedManual.id, reviewState(resolvedManual, 'MATCHED')],
+    ])
+    vi.mocked(window.adminPurchases.review).mockImplementation(async (purchaseId) => reviewByPurchaseId.get(purchaseId)!)
 
     render(<Purchases />)
-    expect(await screen.findByText('Waiting for review')).toBeInTheDocument()
+    expect(await screen.findAllByText('WAITING FOR REVIEW')).toHaveLength(2)
     const rows = screen.getAllByRole('article')
     expect(rows.map((row) => row.querySelector('strong')?.textContent)).toEqual([
-      'PDF-UNRESOLVED', 'PDF-RESOLVED', 'MANUAL-UNRESOLVED',
+      'PDF-UNRESOLVED', '6724838930', 'PDF-RESOLVED', 'MANUAL-RESOLVED',
     ])
-    expect(rows[0]).toHaveTextContent('20 Sept 2026 · 1 document · Waiting for review')
-    expect(within(rows[0]).getByText('Waiting for review')).toHaveClass('purchase-review-status')
-    expect(within(rows[1]).queryByText('Waiting for review')).not.toBeInTheDocument()
-    expect(within(rows[2]).queryByText('Waiting for review')).not.toBeInTheDocument()
+    expect(within(rows[0]).getByText('PDF-UNRESOLVED').parentElement).toHaveClass('purchase-row-reference')
+    expect(within(rows[0]).getByText('WAITING FOR REVIEW')).toHaveClass('purchase-review-status')
+    expect(within(rows[0]).getByText('20 Sept 2026 · 1 document')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('WAITING FOR REVIEW')).toHaveClass('purchase-review-status')
+    expect(within(rows[2]).queryByText('WAITING FOR REVIEW')).not.toBeInTheDocument()
+    expect(within(rows[3]).queryByText('WAITING FOR REVIEW')).not.toBeInTheDocument()
     expect(window.adminPurchases.review).toHaveBeenCalledWith(9)
+    expect(window.adminPurchases.review).toHaveBeenCalledWith(6724838930)
     expect(window.adminPurchases.review).toHaveBeenCalledWith(7)
-    expect(window.adminPurchases.review).not.toHaveBeenCalledWith(5)
+    expect(window.adminPurchases.review).toHaveBeenCalledWith(5)
 
     const detailReview: Review = { purchase, revision: 'b'.repeat(64), totalCost: '0.00', groups: [] }
     vi.mocked(window.adminPurchases.review).mockResolvedValueOnce(detailReview)
