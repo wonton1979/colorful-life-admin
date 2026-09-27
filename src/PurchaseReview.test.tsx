@@ -8,7 +8,7 @@ import fixture from './test-fixtures/purchase-review.json'
 const review = () => parseReview(structuredClone(fixture))
 beforeEach(() => {
   window.adminPurchases = {
-    createManual: vi.fn(), importPdf: vi.fn(), list: vi.fn(), get: vi.fn(), review: vi.fn().mockResolvedValue(review()),
+    getManualSupplierOptions: vi.fn(), createManual: vi.fn(), importPdf: vi.fn(), list: vi.fn(), get: vi.fn(), review: vi.fn().mockResolvedValue(review()),
     amend: vi.fn().mockResolvedValue(review()), resolve: vi.fn().mockResolvedValue(review()),
     receive: vi.fn().mockResolvedValue(review()), searchProducts: vi.fn().mockResolvedValue([]), createListing: vi.fn(),
     purchaseAnalyticsSummary: vi.fn(), supplierMonthlyAnalytics: vi.fn(),

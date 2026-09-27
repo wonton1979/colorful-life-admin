@@ -1,5 +1,5 @@
 import type { AuthService } from './auth-service.js'
-import type { AdminPurchasesApi, ManualPurchaseCreated, ManualPurchaseInput, Purchase, PurchaseAnalyticsSummary, PurchaseDocument, PurchaseImportResult, PurchaseItem, PurchasePage, SupplierMonthlyPurchaseAnalytics } from './purchase-contract.js'
+import type { AdminPurchasesApi, ManualPurchaseCreated, ManualPurchaseInput, ManualPurchaseSupplierOptions, Purchase, PurchaseAnalyticsSummary, PurchaseDocument, PurchaseImportResult, PurchaseItem, PurchasePage, SupplierMonthlyPurchaseAnalytics } from './purchase-contract.js'
 import type { PurchaseReview, ReviewGroup, PurchaseAmendment, ReviewProduct, ReviewListingCreation } from './purchase-contract.js'
 import { parseProduct } from './product-service.js'
 import { readBackendError } from './backend-error.js'
@@ -46,6 +46,19 @@ const analyticsResponseError = async (response: Response): Promise<PurchaseError
     return new PurchaseError('server', 'The Colorful Life service is unavailable right now.', response.status, details.code)
   }
   return new PurchaseError('server', details.message, response.status, details.code)
+}
+
+const parseManualPurchaseSupplierOptions = (value: unknown): ManualPurchaseSupplierOptions => {
+  if (!isRecord(value) || !Array.isArray(value.canonicalSuppliers) ||
+    !value.canonicalSuppliers.every((supplier) => isString(supplier) && supplier.trim().length > 0) ||
+    !isString(value.customSupplierOption) || value.customSupplierOption.trim().length === 0 ||
+    value.canonicalSuppliers.includes(value.customSupplierOption)) {
+    throw new PurchaseError('malformed-response', 'The server returned invalid manual purchase supplier options.')
+  }
+  return {
+    canonicalSuppliers: [...value.canonicalSuppliers],
+    customSupplierOption: value.customSupplierOption,
+  }
 }
 
 const isMoneyString = (value: unknown): value is string => typeof value === 'string' && /^\d+\.\d{2}$/.test(value)
@@ -158,6 +171,12 @@ export class PurchaseService implements AdminPurchasesApi {
   private readonly auth: AuthService
 
   constructor(auth: AuthService) { this.auth = auth }
+
+  async getManualSupplierOptions(): Promise<ManualPurchaseSupplierOptions> {
+    const response = await this.auth.authenticatedFetch('/purchases/manual-supplier-options')
+    if (!response.ok) throw await responseError(response)
+    return parseManualPurchaseSupplierOptions(await response.json())
+  }
 
   async createManual(input: ManualPurchaseInput): Promise<ManualPurchaseCreated> {
     const response = await this.auth.authenticatedFetch('/purchases/manual', {

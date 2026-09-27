@@ -1,6 +1,8 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import type { ManualPurchaseInput } from '../electron/purchase-contract.js'
+import type { ManualPurchaseInput, ManualPurchaseSupplierOptions } from '../electron/purchase-contract.js'
+import { isAdminIpcError } from '../electron/ipc-error-contract.js'
+import { adminPurchases } from './admin-api'
 
 type DraftItem = { description: string; setNumber: string; quantity: string; unitCost: string }
 const blankItem = (): DraftItem => ({ description: '', setNumber: '', quantity: '1', unitCost: '' })
@@ -16,7 +18,12 @@ const pounds = (pence: number): string => `${Math.floor(pence / 100)}.${String(p
 export default function ManualPurchaseForm({ onCancel, onCreate }: { onCancel: () => void; onCreate: (input: ManualPurchaseInput) => Promise<void> }) {
   const [reference, setReference] = useState('')
   const [purchaseDate, setPurchaseDate] = useState('')
-  const [merchant, setMerchant] = useState('')
+  const [supplierOptions, setSupplierOptions] = useState<ManualPurchaseSupplierOptions | null>(null)
+  const [supplierOptionsLoading, setSupplierOptionsLoading] = useState(true)
+  const [supplierOptionsError, setSupplierOptionsError] = useState('')
+  const [supplierOptionsRetry, setSupplierOptionsRetry] = useState(0)
+  const [supplierChoice, setSupplierChoice] = useState('')
+  const [customSupplier, setCustomSupplier] = useState('')
   const [invoiceReference, setInvoiceReference] = useState('')
   const [documentDate, setDocumentDate] = useState('')
   const [shipping, setShipping] = useState('0.00')
@@ -25,6 +32,22 @@ export default function ManualPurchaseForm({ onCancel, onCreate }: { onCancel: (
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const submitLock = useRef(false)
+
+  useEffect(() => {
+    let active = true
+    void adminPurchases.getManualSupplierOptions().then((options) => {
+      if (active) setSupplierOptions(options)
+    }).catch((cause: unknown) => {
+      if (!active) return
+      const sessionEnded = isAdminIpcError(cause) &&
+        (cause.code === 'session-invalid' || cause.code === 'auth-required' || cause.backendCode === 'SESSION_INVALID' || cause.backendCode === 'AUTH_REQUIRED')
+      if (sessionEnded) return
+      setSupplierOptionsError(cause instanceof Error ? cause.message : 'Supplier options could not be loaded.')
+    }).finally(() => {
+      if (active) setSupplierOptionsLoading(false)
+    })
+    return () => { active = false }
+  }, [supplierOptionsRetry])
 
   const itemCosts = items.map(item => {
     const quantity = Number(item.quantity)
@@ -50,13 +73,20 @@ export default function ManualPurchaseForm({ onCancel, onCreate }: { onCancel: (
     if (items.some((_, index) => itemCosts[index] === null)) { setError('Enter a valid nonnegative unit cost for every item, using up to two decimal places.'); return }
     if (shippingPence === null || discountPence === null) { setError('Shipping and discount must be nonnegative pound amounts with up to two decimal places.'); return }
     if (merchandisePence === null || totalPence === null) { setError('Discount cannot make the total paid negative.'); return }
+    const customSupplierName = customSupplier.trim()
+    if (supplierOptions && supplierChoice === supplierOptions.customSupplierOption && !customSupplierName) {
+      setError('Enter the other supplier / retailer name.')
+      return
+    }
     submitLock.current = true
     setSubmitting(true)
     try {
       const input: ManualPurchaseInput = {
         sourceOrderReference: reference.trim(),
         ...(purchaseDate ? { sourceOrderDate: purchaseDate } : {}),
-        ...(merchant.trim() ? { merchantName: merchant.trim() } : {}),
+        ...(supplierOptions && supplierChoice === supplierOptions.customSupplierOption
+          ? { merchantName: customSupplierName }
+          : supplierChoice ? { merchantName: supplierChoice } : {}),
         ...(invoiceReference.trim() ? { sourceInvoiceReference: invoiceReference.trim() } : {}),
         ...(documentDate ? { sourceDocumentDate: documentDate } : {}),
         originalGrossMerchandiseTotal: pounds(merchandisePence),
@@ -86,7 +116,31 @@ export default function ManualPurchaseForm({ onCancel, onCreate }: { onCancel: (
     <form className="manual-purchase-form" onSubmit={event => void submit(event)} noValidate>
       <label>Purchase reference *<input value={reference} onChange={event => setReference(event.target.value)} required autoComplete="off" /></label>
       <label>Purchase date<input type="date" value={purchaseDate} onChange={event => setPurchaseDate(event.target.value)} /></label>
-      <label>Supplier / Retailer<input value={merchant} onChange={event => setMerchant(event.target.value)} /></label>
+      <div className="manual-purchase-supplier">
+        <label htmlFor="manual-purchase-supplier">Supplier / Retailer
+          <select id="manual-purchase-supplier" value={supplierChoice} disabled={supplierOptionsLoading || !supplierOptions} aria-busy={supplierOptionsLoading} aria-describedby={supplierOptionsError ? 'manual-purchase-supplier-error' : supplierOptionsLoading ? 'manual-purchase-supplier-loading' : undefined} onChange={event => {
+            const nextChoice = event.target.value
+            setSupplierChoice(nextChoice)
+            if (supplierOptions && supplierChoice === supplierOptions.customSupplierOption && nextChoice !== supplierOptions.customSupplierOption) setCustomSupplier('')
+          }}>
+            <option value="">No supplier specified</option>
+            {supplierOptions?.canonicalSuppliers.map(supplier => <option key={supplier} value={supplier}>{supplier}</option>)}
+            {supplierOptions && <option value={supplierOptions.customSupplierOption}>{supplierOptions.customSupplierOption}</option>}
+          </select>
+        </label>
+        {supplierOptionsLoading && <p id="manual-purchase-supplier-loading" className="manual-purchase-supplier-loading" role="status">Loading supplier options…</p>}
+        {supplierOptionsError && <div className="manual-purchase-supplier-error">
+          <p id="manual-purchase-supplier-error" className="error-message" role="alert">{supplierOptionsError}</p>
+          <button className="button button-secondary" type="button" disabled={supplierOptionsLoading} onClick={() => {
+            setSupplierOptionsError('')
+            setSupplierOptionsLoading(true)
+            setSupplierOptionsRetry(current => current + 1)
+          }}>Retry supplier options</button>
+        </div>}
+        {supplierOptions && supplierChoice === supplierOptions.customSupplierOption && <label htmlFor="manual-purchase-custom-supplier">Other supplier / retailer
+          <input id="manual-purchase-custom-supplier" value={customSupplier} onChange={event => setCustomSupplier(event.target.value)} autoComplete="off" />
+        </label>}
+      </div>
       <label>Invoice reference<input value={invoiceReference} onChange={event => setInvoiceReference(event.target.value)} /></label>
       <label>Document date<input type="date" value={documentDate} onChange={event => setDocumentDate(event.target.value)} /></label>
       <div className="manual-purchase-items">

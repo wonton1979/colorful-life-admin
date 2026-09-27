@@ -11,13 +11,8 @@ const pageSize = 20
 
 const messageFor = (error: unknown): string => error instanceof Error ? error.message : 'The purchase operation could not be completed.'
 const formatDate = (value: string | null): string => value ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(new Date(value)) : 'Date not provided'
-const hasImportedPdfItemsWaitingForReview = (review: Review): boolean => {
-  const importedDocumentIds = new Set(review.purchase.purchaseDocuments
-    .filter((document) => !document.importHash.startsWith('manual:'))
-    .map((document) => document.id))
-  return review.groups.some((group) => group.state === 'UNRESOLVED' &&
-    group.lines.some((line) => importedDocumentIds.has(line.purchaseDocumentId)))
-}
+const hasItemsWaitingForReview = (review: Review): boolean =>
+  review.groups.some((group) => group.state === 'UNRESOLVED' && group.lines.length > 0)
 
 function Purchases() {
   const [file, setFile] = useState<File | null>(null)
@@ -64,9 +59,8 @@ function Purchases() {
       setPage(result.pagination.page)
       setTotalPages(Math.max(1, result.pagination.totalPages))
       void Promise.all(result.purchases.map(async (purchase) => {
-        if (!purchase.purchaseDocuments.some((document) => !document.importHash.startsWith('manual:'))) return null
         try {
-          return { purchaseId: purchase.id, waiting: hasImportedPdfItemsWaitingForReview(await requestReview(purchase.id)) }
+          return { purchaseId: purchase.id, waiting: hasItemsWaitingForReview(await requestReview(purchase.id)) }
         } catch {
           return null
         }
@@ -132,7 +126,7 @@ function Purchases() {
       const review = await requestReview(purchaseId)
       setPurchasesWaitingForReview((current) => {
         const next = new Set(current)
-        if (hasImportedPdfItemsWaitingForReview(review)) next.add(purchaseId)
+        if (hasItemsWaitingForReview(review)) next.add(purchaseId)
         else next.delete(purchaseId)
         return next
       })
@@ -177,7 +171,7 @@ function Purchases() {
         {detailsError && <p className="error-message" role="alert">{detailsError}</p>}
         {historyLoading && <p className="status-message">Loading purchase history…</p>}
         {!historyLoading && !historyError && purchases.length === 0 && <p className="status-message">No purchase documents have been imported yet.</p>}
-        {!historyLoading && purchases.length > 0 && <div className="purchase-list">{purchases.map((purchase) => <article className="purchase-row" key={purchase.id}><div><strong>{purchase.sourceOrderReference}</strong><span>{formatDate(purchase.sourceOrderDate)} · {purchase.purchaseDocuments.length} document{purchase.purchaseDocuments.length === 1 ? '' : 's'}{purchasesWaitingForReview.has(purchase.id) && <> · <span className="purchase-review-status">Waiting for review</span></>}</span></div><button className="button button-secondary" type="button" onClick={() => void openDetails(purchase.id)} disabled={detailsLoading} aria-busy={openingPurchaseId === purchase.id}>{openingPurchaseId === purchase.id ? 'Opening…' : 'View details'}</button></article>)}</div>}
+        {!historyLoading && purchases.length > 0 && <div className="purchase-list">{purchases.map((purchase) => <article className="purchase-row" key={purchase.id}><div><div className="purchase-row-reference"><strong>{purchase.sourceOrderReference}</strong>{purchasesWaitingForReview.has(purchase.id) && <span className="purchase-review-status">WAITING FOR REVIEW</span>}</div><span>{formatDate(purchase.sourceOrderDate)} · {purchase.purchaseDocuments.length} document{purchase.purchaseDocuments.length === 1 ? '' : 's'}</span></div><button className="button button-secondary" type="button" onClick={() => void openDetails(purchase.id)} disabled={detailsLoading} aria-busy={openingPurchaseId === purchase.id}>{openingPurchaseId === purchase.id ? 'Opening…' : 'View details'}</button></article>)}</div>}
         {totalPages > 1 && <nav className="purchase-pagination" aria-label="Purchase history pages"><button className="button button-secondary" type="button" onClick={() => void loadHistory(page - 1)} disabled={page <= 1 || historyLoading}>Previous</button><span>Page {page} of {totalPages}</span><button className="button button-secondary" type="button" onClick={() => void loadHistory(page + 1)} disabled={page >= totalPages || historyLoading}>Next</button></nav>}
       </div>
     </section>

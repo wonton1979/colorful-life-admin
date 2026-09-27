@@ -74,6 +74,12 @@ export interface PurchaseImportResult {
   importHash: string
 }
 
+/** Supplier choices are owned by the backend for manual purchase entry. */
+export interface ManualPurchaseSupplierOptions {
+  canonicalSuppliers: string[]
+  customSupplierOption: string
+}
+
 /** Monetary values are entered in pounds in the renderer and converted to pence by PurchaseService. */
 export interface ManualPurchaseInput {
   sourceOrderReference: string
@@ -97,6 +103,7 @@ export interface ManualPurchaseInput {
 export interface ManualPurchaseCreated { purchaseId: number; documentId: number }
 
 export interface AdminPurchasesApi {
+  getManualSupplierOptions(): Promise<ManualPurchaseSupplierOptions>
   createManual(input: ManualPurchaseInput): Promise<ManualPurchaseCreated>
   review(purchaseId: number): Promise<PurchaseReview>
   amend(purchaseId: number, itemId: number, input: PurchaseAmendment): Promise<PurchaseReview>
