@@ -1,14 +1,31 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Purchases from './Purchases'
+import type { Purchase, PurchaseReview as Review } from '../electron/purchase-contract.js'
 
-const purchase = { id: 3, sourceOrderReference: 'ORDER-1', sourceOrderDate: '2026-09-20T00:00:00.000Z', merchantName: null, createdAt: '2026-09-20T00:00:00.000Z', updatedAt: '2026-09-20T00:00:00.000Z', purchaseDocuments: [] }
+const purchase: Purchase = { id: 3, sourceOrderReference: 'ORDER-1', sourceOrderDate: '2026-09-20T00:00:00.000Z', merchantName: null, createdAt: '2026-09-20T00:00:00.000Z', updatedAt: '2026-09-20T00:00:00.000Z', purchaseDocuments: [] }
+const historyRow = (id: number, sourceOrderReference: string, importHash: string): Purchase => ({
+  ...purchase,
+  id,
+  sourceOrderReference,
+  purchaseDocuments: [{
+    id: id * 10, purchaseId: id, partNumber: 1, sourceInvoiceReference: null, importHash, sourceDocumentDate: null,
+    importedByUserId: 7, originalGrossMerchandiseTotal: '10.00', shippingTotal: '0.00', discountTotal: '0.00',
+    finalTotalPaid: '10.00', createdAt: purchase.createdAt, updatedAt: purchase.updatedAt,
+  }],
+})
+const reviewState = (purchase: Purchase, state: 'UNRESOLVED' | 'MATCHED'): Review => ({
+  purchase,
+  revision: 'a'.repeat(64),
+  totalCost: '10.00',
+  groups: [{ state, lines: [{ purchaseDocumentId: purchase.purchaseDocuments[0].id }] }],
+} as unknown as Review)
 
 describe('Purchases', () => {
   afterEach(() => cleanup())
 
   beforeEach(() => {
-    window.adminPurchases = { createManual: vi.fn().mockResolvedValue({ purchaseId: purchase.id, documentId: 4 }), review: vi.fn().mockResolvedValue({ purchase, revision: 'a'.repeat(64), totalCost: '0.00', groups: [] }), amend: vi.fn(), resolve: vi.fn(), receive: vi.fn(), searchProducts: vi.fn(), createListing: vi.fn(), importPdf: vi.fn().mockResolvedValue({ message: 'Purchase invoice imported successfully', importHash: 'hash' }), list: vi.fn().mockResolvedValue({ purchases: [purchase], pagination: { page: 1, limit: 20, total: 1, totalPages: 1 } }), get: vi.fn().mockResolvedValue(purchase) }
+    window.adminPurchases = { createManual: vi.fn().mockResolvedValue({ purchaseId: purchase.id, documentId: 4 }), review: vi.fn().mockResolvedValue({ purchase, revision: 'a'.repeat(64), totalCost: '0.00', groups: [] }), amend: vi.fn(), resolve: vi.fn(), receive: vi.fn(), searchProducts: vi.fn(), createListing: vi.fn(), importPdf: vi.fn().mockResolvedValue({ message: 'Purchase invoice imported successfully', importHash: 'hash' }), list: vi.fn().mockResolvedValue({ purchases: [purchase], pagination: { page: 1, limit: 20, total: 1, totalPages: 1 } }), get: vi.fn().mockResolvedValue(purchase), purchaseAnalyticsSummary: vi.fn().mockResolvedValue({ totalQuantity: 0, totalAmount: '0.00', suppliers: [] }), supplierMonthlyAnalytics: vi.fn().mockResolvedValue({ supplierKey: 'unknown', supplierName: 'Unknown supplier', months: [], undatedTotalAmount: '0.00' }) }
   })
 
   it('rejects non-PDF files and imports a selected PDF', async () => {
@@ -120,5 +137,47 @@ describe('Purchases', () => {
     fireEvent.change(screen.getByLabelText('Unit cost (£) *'), { target: { value: '4.00' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create purchase' }))
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Purchase reference already exists.'))
+  })
+
+  it('opens Purchase Analytics from Purchases and returns to purchase history', async () => {
+    render(<Purchases />)
+    fireEvent.click(screen.getByRole('button', { name: 'Purchase Analytics' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Purchase Summary' })).toBeInTheDocument())
+    expect(window.adminPurchases.purchaseAnalyticsSummary).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Back to Purchases' }))
+    expect(screen.getByRole('heading', { name: 'Purchases' })).toBeInTheDocument()
+  })
+
+  it('marks only unresolved imported purchases, keeps API order, and preserves View details', async () => {
+    const unresolvedPdf = historyRow(9, 'PDF-UNRESOLVED', 'pdf-hash-9')
+    const resolvedPdf = historyRow(7, 'PDF-RESOLVED', 'pdf-hash-7')
+    const unresolvedManual = historyRow(5, 'MANUAL-UNRESOLVED', 'manual:manual-hash-5')
+    vi.mocked(window.adminPurchases.list).mockResolvedValueOnce({
+      purchases: [unresolvedPdf, resolvedPdf, unresolvedManual],
+      pagination: { page: 1, limit: 20, total: 3, totalPages: 1 },
+    })
+    vi.mocked(window.adminPurchases.review).mockImplementation(async (purchaseId) => purchaseId === 9
+      ? reviewState(unresolvedPdf, 'UNRESOLVED')
+      : reviewState(resolvedPdf, 'MATCHED'))
+
+    render(<Purchases />)
+    expect(await screen.findByText('Waiting for review')).toBeInTheDocument()
+    const rows = screen.getAllByRole('article')
+    expect(rows.map((row) => row.querySelector('strong')?.textContent)).toEqual([
+      'PDF-UNRESOLVED', 'PDF-RESOLVED', 'MANUAL-UNRESOLVED',
+    ])
+    expect(rows[0]).toHaveTextContent('20 Sept 2026 · 1 document · Waiting for review')
+    expect(within(rows[0]).getByText('Waiting for review')).toHaveClass('purchase-review-status')
+    expect(within(rows[1]).queryByText('Waiting for review')).not.toBeInTheDocument()
+    expect(within(rows[2]).queryByText('Waiting for review')).not.toBeInTheDocument()
+    expect(window.adminPurchases.review).toHaveBeenCalledWith(9)
+    expect(window.adminPurchases.review).toHaveBeenCalledWith(7)
+    expect(window.adminPurchases.review).not.toHaveBeenCalledWith(5)
+
+    const detailReview: Review = { purchase, revision: 'b'.repeat(64), totalCost: '0.00', groups: [] }
+    vi.mocked(window.adminPurchases.review).mockResolvedValueOnce(detailReview)
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'View details' }))
+    expect(await screen.findByRole('heading', { name: 'ORDER-1' })).toBeInTheDocument()
+    expect(window.adminPurchases.review).toHaveBeenLastCalledWith(9)
   })
 })

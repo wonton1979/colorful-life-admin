@@ -1,10 +1,10 @@
 import type { AuthService } from './auth-service.js'
-import type { AdminPurchasesApi, ManualPurchaseCreated, ManualPurchaseInput, Purchase, PurchaseDocument, PurchaseImportResult, PurchaseItem, PurchasePage } from './purchase-contract.js'
+import type { AdminPurchasesApi, ManualPurchaseCreated, ManualPurchaseInput, Purchase, PurchaseAnalyticsSummary, PurchaseDocument, PurchaseImportResult, PurchaseItem, PurchasePage, SupplierMonthlyPurchaseAnalytics } from './purchase-contract.js'
 import type { PurchaseReview, ReviewGroup, PurchaseAmendment, ReviewProduct, ReviewListingCreation } from './purchase-contract.js'
 import { parseProduct } from './product-service.js'
 import { readBackendError } from './backend-error.js'
 
-export type PurchaseErrorCode = 'validation' | 'duplicate' | 'conflict' | 'forbidden' | 'not-found' | 'server' | 'session-invalid' | 'malformed-response'
+export type PurchaseErrorCode = 'validation' | 'duplicate' | 'conflict' | 'forbidden' | 'not-found' | 'server' | 'session-invalid' | 'malformed-response' | 'invalid-supplier-key' | 'analytics-supplier-not-found'
 
 export class PurchaseError extends Error {
   readonly code: PurchaseErrorCode
@@ -29,6 +29,52 @@ const responseError = async (response: Response, importing = false): Promise<Pur
   if (response.status === 404) return new PurchaseError('not-found', 'The purchase could not be found.', response.status, code)
   if (response.status === 409) return new PurchaseError(importing ? 'duplicate' : 'conflict', importing ? 'This purchase document has already been imported.' : message, response.status, code)
   return new PurchaseError('server', response.status >= 500 || code === 'INTERNAL_SERVER_ERROR' ? 'The Colorful Life service is unavailable right now.' : message, response.status, code)
+}
+
+const analyticsResponseError = async (response: Response): Promise<PurchaseError> => {
+  const details = await readBackendError(response, 'Purchase analytics could not be retrieved.')
+  if (details.code === 'INVALID_SUPPLIER_KEY') {
+    return new PurchaseError('invalid-supplier-key', 'This supplier selection is invalid. Return to the summary and choose a supplier again.', response.status, details.code)
+  }
+  if (details.code === 'PURCHASE_ANALYTICS_SUPPLIER_NOT_FOUND') {
+    return new PurchaseError('analytics-supplier-not-found', 'This supplier is no longer available in purchase analytics.', response.status, details.code)
+  }
+  if (details.code === 'FORBIDDEN' || response.status === 403) {
+    return new PurchaseError('forbidden', 'This account cannot access purchase analytics.', response.status, details.code)
+  }
+  if (response.status >= 500 || details.code === 'INTERNAL_SERVER_ERROR') {
+    return new PurchaseError('server', 'The Colorful Life service is unavailable right now.', response.status, details.code)
+  }
+  return new PurchaseError('server', details.message, response.status, details.code)
+}
+
+const isMoneyString = (value: unknown): value is string => typeof value === 'string' && /^\d+\.\d{2}$/.test(value)
+
+const parsePurchaseAnalyticsSummary = (value: unknown): PurchaseAnalyticsSummary => {
+  if (!isRecord(value) || !isNumber(value.totalQuantity) || !Number.isSafeInteger(value.totalQuantity) || value.totalQuantity < 0 ||
+    !isMoneyString(value.totalAmount) || !Array.isArray(value.suppliers)) {
+    throw new PurchaseError('malformed-response', 'The server returned invalid purchase analytics.')
+  }
+  const suppliers = value.suppliers.map((supplier: unknown) => {
+    if (!isRecord(supplier) || !isString(supplier.supplierKey) || !isString(supplier.supplierName) || !isMoneyString(supplier.totalAmount)) {
+      throw new PurchaseError('malformed-response', 'The server returned invalid supplier analytics.')
+    }
+    return { supplierKey: supplier.supplierKey, supplierName: supplier.supplierName, totalAmount: supplier.totalAmount }
+  })
+  return { totalQuantity: value.totalQuantity, totalAmount: value.totalAmount, suppliers }
+}
+
+const parseSupplierMonthlyAnalytics = (value: unknown): SupplierMonthlyPurchaseAnalytics => {
+  if (!isRecord(value) || !isString(value.supplierKey) || !isString(value.supplierName) || !Array.isArray(value.months) || !isMoneyString(value.undatedTotalAmount)) {
+    throw new PurchaseError('malformed-response', 'The server returned invalid supplier monthly analytics.')
+  }
+  const months = value.months.map((row: unknown) => {
+    if (!isRecord(row) || !isString(row.month) || !/^\d{4}-(?:0[1-9]|1[0-2])$/.test(row.month) || !isMoneyString(row.totalAmount)) {
+      throw new PurchaseError('malformed-response', 'The server returned invalid supplier monthly analytics.')
+    }
+    return { month: row.month, totalAmount: row.totalAmount }
+  })
+  return { supplierKey: value.supplierKey, supplierName: value.supplierName, months, undatedTotalAmount: value.undatedTotalAmount }
 }
 
 const parseItem = (value: unknown): PurchaseItem => {
@@ -176,6 +222,18 @@ export class PurchaseService implements AdminPurchasesApi {
     const response = await this.auth.authenticatedFetch(`/purchases/${purchaseId}`)
     if (!response.ok) throw await responseError(response)
     return parsePurchase(await response.json(), true)
+  }
+
+  async purchaseAnalyticsSummary(): Promise<PurchaseAnalyticsSummary> {
+    const response = await this.auth.authenticatedFetch('/purchase-analytics')
+    if (!response.ok) throw await analyticsResponseError(response)
+    return parsePurchaseAnalyticsSummary(await response.json())
+  }
+
+  async supplierMonthlyAnalytics(supplierKey: string): Promise<SupplierMonthlyPurchaseAnalytics> {
+    const response = await this.auth.authenticatedFetch(`/purchase-analytics/suppliers/${encodeURIComponent(supplierKey)}/monthly`)
+    if (!response.ok) throw await analyticsResponseError(response)
+    return parseSupplierMonthlyAnalytics(await response.json())
   }
 }
 

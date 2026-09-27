@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
 import PurchaseReview from './PurchaseReview'
+import PurchaseAnalytics from './PurchaseAnalytics'
 import ManualPurchaseForm from './ManualPurchaseForm'
 import type { ManualPurchaseInput, Purchase, PurchaseImportResult, PurchaseReview as Review } from '../electron/purchase-contract.js'
 import { adminPurchases } from './admin-api'
@@ -10,6 +11,13 @@ const pageSize = 20
 
 const messageFor = (error: unknown): string => error instanceof Error ? error.message : 'The purchase operation could not be completed.'
 const formatDate = (value: string | null): string => value ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(new Date(value)) : 'Date not provided'
+const hasImportedPdfItemsWaitingForReview = (review: Review): boolean => {
+  const importedDocumentIds = new Set(review.purchase.purchaseDocuments
+    .filter((document) => !document.importHash.startsWith('manual:'))
+    .map((document) => document.id))
+  return review.groups.some((group) => group.state === 'UNRESOLVED' &&
+    group.lines.some((line) => importedDocumentIds.has(line.purchaseDocumentId)))
+}
 
 function Purchases() {
   const [file, setFile] = useState<File | null>(null)
@@ -26,26 +34,58 @@ function Purchases() {
   const [openingPurchaseId, setOpeningPurchaseId] = useState<number | null>(null)
   const [detailsError, setDetailsError] = useState('')
   const [manualPurchaseOpen, setManualPurchaseOpen] = useState(false)
+  const [analyticsOpen, setAnalyticsOpen] = useState(false)
+  const [purchasesWaitingForReview, setPurchasesWaitingForReview] = useState<Set<number>>(() => new Set())
   const inputRef = useRef<HTMLInputElement>(null)
+  const historyRequest = useRef(0)
+  const reviewRequests = useRef(new Map<number, Promise<Review>>())
 
-  const loadHistory = async (nextPage = page) => {
+  const requestReview = (purchaseId: number): Promise<Review> => {
+    const existingRequest = reviewRequests.current.get(purchaseId)
+    if (existingRequest) return existingRequest
+    const request = adminPurchases.review(purchaseId)
+    reviewRequests.current.set(purchaseId, request)
+    const clearRequest = () => {
+      if (reviewRequests.current.get(purchaseId) === request) reviewRequests.current.delete(purchaseId)
+    }
+    void request.then(clearRequest, clearRequest)
+    return request
+  }
+
+  const loadHistory = useCallback(async (nextPage: number) => {
+    const request = ++historyRequest.current
     setHistoryLoading(true)
     setHistoryError('')
     try {
       const result = await adminPurchases.list(nextPage, pageSize)
+      if (historyRequest.current !== request) return
       setPurchases(result.purchases)
+      setPurchasesWaitingForReview(new Set())
       setPage(result.pagination.page)
       setTotalPages(Math.max(1, result.pagination.totalPages))
+      void Promise.all(result.purchases.map(async (purchase) => {
+        if (!purchase.purchaseDocuments.some((document) => !document.importHash.startsWith('manual:'))) return null
+        try {
+          return { purchaseId: purchase.id, waiting: hasImportedPdfItemsWaitingForReview(await requestReview(purchase.id)) }
+        } catch {
+          return null
+        }
+      })).then((reviewStates) => {
+        if (historyRequest.current !== request) return
+        setPurchasesWaitingForReview(new Set(reviewStates.flatMap((state) => state?.waiting ? [state.purchaseId] : [])))
+      })
     } catch (error) {
-      setHistoryError(messageFor(error))
+      if (historyRequest.current === request) setHistoryError(messageFor(error))
     } finally {
-      setHistoryLoading(false)
+      if (historyRequest.current === request) setHistoryLoading(false)
     }
-  }
+  }, [])
 
   // Initialising the remote-backed history is the purpose of this effect.
-  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
-  useEffect(() => { void loadHistory(1) }, [])
+  useEffect(() => {
+    void Promise.resolve().then(() => loadHistory(1))
+    return () => { historyRequest.current += 1 }
+  }, [loadHistory])
 
   const chooseFile = (candidate: File | undefined) => {
     setImportResult(null)
@@ -89,7 +129,14 @@ function Purchases() {
     setOpeningPurchaseId(purchaseId)
     setDetailsError('')
     try {
-      setSelectedPurchase(await adminPurchases.review(purchaseId))
+      const review = await requestReview(purchaseId)
+      setPurchasesWaitingForReview((current) => {
+        const next = new Set(current)
+        if (hasImportedPdfItemsWaitingForReview(review)) next.add(purchaseId)
+        else next.delete(purchaseId)
+        return next
+      })
+      setSelectedPurchase(review)
     } catch (error) {
       setDetailsError(messageFor(error))
     } finally {
@@ -105,11 +152,12 @@ function Purchases() {
     await openDetails(created.purchaseId)
   }
 
-  if (selectedPurchase) return <PurchaseReview initialReview={selectedPurchase} onBack={() => setSelectedPurchase(null)} />
+  if (selectedPurchase) return <PurchaseReview initialReview={selectedPurchase} onBack={() => { setSelectedPurchase(null); void loadHistory(page) }} />
+  if (analyticsOpen) return <PurchaseAnalytics onBack={() => setAnalyticsOpen(false)} />
 
   return (
     <section className="purchases-workspace" aria-labelledby="purchases-title">
-      <div className="purchases-heading"><div><p className="eyebrow">OPERATIONS</p><h2 id="purchases-title">Purchases</h2></div><div className="purchase-heading-actions"><button className="button button-primary" type="button" onClick={() => { setManualPurchaseOpen(true) }}>Add Purchase</button><button className="button button-secondary" type="button" onClick={() => void loadHistory()} disabled={historyLoading} aria-busy={historyLoading}>{historyLoading ? 'Loading…' : 'Refresh history'}</button></div></div>
+      <div className="purchases-heading"><div><p className="eyebrow">OPERATIONS</p><h2 id="purchases-title">Purchases</h2></div><div className="purchase-heading-actions"><button className="button button-primary" type="button" onClick={() => { setManualPurchaseOpen(true) }}>Add Purchase</button><button className="button button-secondary" type="button" onClick={() => setAnalyticsOpen(true)}>Purchase Analytics</button><button className="button button-secondary" type="button" onClick={() => void loadHistory(page)} disabled={historyLoading} aria-busy={historyLoading}>{historyLoading ? 'Loading…' : 'Refresh history'}</button></div></div>
       {manualPurchaseOpen && <ManualPurchaseForm onCancel={() => setManualPurchaseOpen(false)} onCreate={createManualPurchase} />}
       <div className="purchase-import-card">
         <p className="eyebrow">PURCHASE IMPORT</p><h3>Import Purchase Document</h3><p className="panel-intro">Upload a purchase document in PDF format. It will be checked and recorded securely.</p>
@@ -129,7 +177,7 @@ function Purchases() {
         {detailsError && <p className="error-message" role="alert">{detailsError}</p>}
         {historyLoading && <p className="status-message">Loading purchase history…</p>}
         {!historyLoading && !historyError && purchases.length === 0 && <p className="status-message">No purchase documents have been imported yet.</p>}
-        {!historyLoading && purchases.length > 0 && <div className="purchase-list">{purchases.map((purchase) => <article className="purchase-row" key={purchase.id}><div><strong>{purchase.sourceOrderReference}</strong><span>{formatDate(purchase.sourceOrderDate)} · {purchase.purchaseDocuments.length} document{purchase.purchaseDocuments.length === 1 ? '' : 's'}</span></div><button className="button button-secondary" type="button" onClick={() => void openDetails(purchase.id)} disabled={detailsLoading} aria-busy={openingPurchaseId === purchase.id}>{openingPurchaseId === purchase.id ? 'Opening…' : 'View details'}</button></article>)}</div>}
+        {!historyLoading && purchases.length > 0 && <div className="purchase-list">{purchases.map((purchase) => <article className="purchase-row" key={purchase.id}><div><strong>{purchase.sourceOrderReference}</strong><span>{formatDate(purchase.sourceOrderDate)} · {purchase.purchaseDocuments.length} document{purchase.purchaseDocuments.length === 1 ? '' : 's'}{purchasesWaitingForReview.has(purchase.id) && <> · <span className="purchase-review-status">Waiting for review</span></>}</span></div><button className="button button-secondary" type="button" onClick={() => void openDetails(purchase.id)} disabled={detailsLoading} aria-busy={openingPurchaseId === purchase.id}>{openingPurchaseId === purchase.id ? 'Opening…' : 'View details'}</button></article>)}</div>}
         {totalPages > 1 && <nav className="purchase-pagination" aria-label="Purchase history pages"><button className="button button-secondary" type="button" onClick={() => void loadHistory(page - 1)} disabled={page <= 1 || historyLoading}>Previous</button><span>Page {page} of {totalPages}</span><button className="button button-secondary" type="button" onClick={() => void loadHistory(page + 1)} disabled={page >= totalPages || historyLoading}>Next</button></nav>}
       </div>
     </section>

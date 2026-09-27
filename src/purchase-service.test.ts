@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { AuthService } from '../electron/auth-service.js'
+import { AuthService } from '../electron/auth-service.js'
 import { PurchaseError, PurchaseService } from '../electron/purchase-service.js'
 
 const item = { id: 1, productListingId: null, externalProductId: 'ASIN', sourceDescription: 'Example set', sourceSetNumber: '12345', sourceLineNumber: 1, quantity: 2, originalGrossUnitCost: '10.00', originalGrossLineTotal: '20.00', allocatedShipping: '1.00', allocatedDiscount: '0.50', finalLineCost: '20.50', finalUnitCost: '10.250000', receivedAt: null, returnedAt: null }
@@ -43,5 +43,75 @@ describe('PurchaseService', () => {
     const service = new PurchaseService({ authenticatedFetch } as unknown as AuthService)
     await expect(service.list()).rejects.toMatchObject({ code: 'forbidden', backendCode: 'FORBIDDEN', status: 403 } satisfies Partial<PurchaseError>)
     await expect(service.list()).rejects.toMatchObject({ code: 'server', backendCode: 'INTERNAL_SERVER_ERROR', status: 500 } satisfies Partial<PurchaseError>)
+  })
+
+  it('requests and maps the backend purchase analytics summary without recalculating it', async () => {
+    const summary = {
+      totalQuantity: 1250,
+      totalAmount: '18420.50',
+      suppliers: [
+        { supplierKey: 'supplier-abc', supplierName: 'Example Supplier', totalAmount: '8250.25' },
+        { supplierKey: 'unknown', supplierName: 'Unknown supplier', totalAmount: '450.00' },
+      ],
+    }
+    const authenticatedFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(summary), { status: 200 }))
+    const service = new PurchaseService({ authenticatedFetch } as unknown as AuthService)
+
+    await expect(service.purchaseAnalyticsSummary()).resolves.toEqual(summary)
+    expect(authenticatedFetch).toHaveBeenCalledWith('/purchase-analytics')
+  })
+
+  it('requests supplier monthly analytics using the encoded backend supplierKey and preserves its ordering', async () => {
+    const monthly = {
+      supplierKey: 'supplier-a/b',
+      supplierName: 'Example Supplier',
+      months: [{ month: '2026-09', totalAmount: '12.34' }, { month: '2026-08', totalAmount: '56.78' }],
+      undatedTotalAmount: '6.66',
+    }
+    const authenticatedFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(monthly), { status: 200 }))
+    const service = new PurchaseService({ authenticatedFetch } as unknown as AuthService)
+
+    await expect(service.supplierMonthlyAnalytics(monthly.supplierKey)).resolves.toEqual(monthly)
+    expect(authenticatedFetch).toHaveBeenCalledWith('/purchase-analytics/suppliers/supplier-a%2Fb/monthly')
+  })
+
+  it('preserves analytics-specific structured backend errors without treating them as logout', async () => {
+    const authenticatedFetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'INVALID_SUPPLIER_KEY', message: 'Invalid supplier key' } }), { status: 400 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'PURCHASE_ANALYTICS_SUPPLIER_NOT_FOUND', message: 'Supplier not found' } }), { status: 404 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'FORBIDDEN', message: 'Forbidden' } }), { status: 403 }))
+    const service = new PurchaseService({ authenticatedFetch } as unknown as AuthService)
+
+    await expect(service.supplierMonthlyAnalytics('bad-key')).rejects.toMatchObject({ code: 'invalid-supplier-key', backendCode: 'INVALID_SUPPLIER_KEY', status: 400 } satisfies Partial<PurchaseError>)
+    await expect(service.supplierMonthlyAnalytics('supplier-missing')).rejects.toMatchObject({ code: 'analytics-supplier-not-found', backendCode: 'PURCHASE_ANALYTICS_SUPPLIER_NOT_FOUND', status: 404 } satisfies Partial<PurchaseError>)
+    await expect(service.purchaseAnalyticsSummary()).rejects.toMatchObject({ code: 'forbidden', backendCode: 'FORBIDDEN', status: 403 } satisfies Partial<PurchaseError>)
+  })
+
+  it('keeps analytics SESSION_INVALID responses on the centralized AuthService renewal path', async () => {
+    const expiry = '2099-01-01T00:00:00.000Z'
+    const responseBody = {
+      totalQuantity: 0,
+      totalAmount: '0.00',
+      suppliers: [],
+    }
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ token: 'old-access', accessTokenExpiresAt: expiry, refreshToken: 'old-refresh', refreshExpiresAt: expiry }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 7, email: 'admin@example.test', role: 'ADMIN', createdAt: expiry, updatedAt: expiry }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'SESSION_INVALID', message: 'Session invalid' } }), { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ token: 'new-access', accessTokenExpiresAt: expiry, refreshToken: 'new-refresh', refreshExpiresAt: expiry }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(responseBody), { status: 200 }))
+    const auth = new AuthService('https://api.example.test', fetcher)
+    await auth.login({ email: 'admin@example.test', password: 'password' })
+    const service = new PurchaseService(auth)
+
+    await expect(service.purchaseAnalyticsSummary()).resolves.toEqual(responseBody)
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      'https://api.example.test/auth/login',
+      'https://api.example.test/profile',
+      'https://api.example.test/purchase-analytics',
+      'https://api.example.test/auth/refresh',
+      'https://api.example.test/purchase-analytics',
+    ])
+    expect(new Headers(fetcher.mock.calls[4][1]?.headers).get('Authorization')).toBe('Bearer new-access')
   })
 })

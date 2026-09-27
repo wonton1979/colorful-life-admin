@@ -48,6 +48,27 @@ export interface PurchasePage {
   pagination: { page: number; limit: number; total: number; totalPages: number }
 }
 
+/** Monetary totals are backend-calculated decimal strings; the renderer only formats them. */
+export interface PurchaseAnalyticsSummary {
+  totalQuantity: number
+  totalAmount: string
+  suppliers: Array<{
+    supplierKey: string
+    supplierName: string
+    totalAmount: string
+  }>
+}
+
+export interface SupplierMonthlyPurchaseAnalytics {
+  supplierKey: string
+  supplierName: string
+  months: Array<{
+    month: string
+    totalAmount: string
+  }>
+  undatedTotalAmount: string
+}
+
 export interface PurchaseImportResult {
   message: string
   importHash: string
@@ -86,6 +107,8 @@ export interface AdminPurchasesApi {
   importPdf(file: { bytes: Uint8Array; filename: string; mimeType: 'application/pdf' }): Promise<PurchaseImportResult>
   list(page?: number, limit?: number): Promise<PurchasePage>
   get(purchaseId: number): Promise<Purchase>
+  purchaseAnalyticsSummary(): Promise<PurchaseAnalyticsSummary>
+  supplierMonthlyAnalytics(supplierKey: string): Promise<SupplierMonthlyPurchaseAnalytics>
 }
 
 export interface ReviewProduct { id: number; setNumber: string; title: string }

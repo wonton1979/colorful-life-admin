@@ -68,6 +68,8 @@ const adminPurchases: AdminPurchasesApi = {
   importPdf: (file) => forwardIpcResult(ipcRenderer.invoke('admin-purchases:import-pdf', file)),
   list: (page, limit) => forwardIpcResult(ipcRenderer.invoke('admin-purchases:list', page, limit)),
   get: (purchaseId) => forwardIpcResult(ipcRenderer.invoke('admin-purchases:get', purchaseId)),
+  purchaseAnalyticsSummary: () => forwardIpcResult(ipcRenderer.invoke('admin-purchases:analytics-summary')),
+  supplierMonthlyAnalytics: (supplierKey) => forwardIpcResult(ipcRenderer.invoke('admin-purchases:supplier-monthly-analytics', supplierKey)),
 }
 
 contextBridge.exposeInMainWorld('adminPurchases', adminPurchases)
