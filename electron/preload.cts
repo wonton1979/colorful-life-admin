@@ -63,6 +63,7 @@ const adminPurchases: AdminPurchasesApi = {
   review: (id) => forwardIpcResult(ipcRenderer.invoke('admin-purchases:review', id)),
   amend: (id, itemId, input) => forwardIpcResult(ipcRenderer.invoke('admin-purchases:amend', id, itemId, input)),
   resolve: (id, groupId, input) => forwardIpcResult(ipcRenderer.invoke('admin-purchases:resolve', id, groupId, input)),
+  setInventoryDisposition: (id, groupId, input) => forwardIpcResult(ipcRenderer.invoke('admin-purchases:set-inventory-disposition', id, groupId, input)),
   receive: (id, groupId, input) => forwardIpcResult(ipcRenderer.invoke('admin-purchases:receive', id, groupId, input)),
   searchProducts: (id, query) => forwardIpcResult(ipcRenderer.invoke('admin-purchases:search-products', id, query)),
   createListing: (id, input) => forwardIpcResult(ipcRenderer.invoke('admin-purchases:create-listing', id, input)),

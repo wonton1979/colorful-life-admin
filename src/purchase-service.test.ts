@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { AuthService } from '../electron/auth-service.js'
 import { PurchaseError, PurchaseService } from '../electron/purchase-service.js'
 
-const item = { id: 1, productListingId: null, externalProductId: 'ASIN', sourceDescription: 'Example set', sourceSetNumber: '12345', sourceLineNumber: 1, quantity: 2, originalGrossUnitCost: '10.00', originalGrossLineTotal: '20.00', allocatedShipping: '1.00', allocatedDiscount: '0.50', finalLineCost: '20.50', finalUnitCost: '10.250000', receivedAt: null, returnedAt: null }
+const item = { id: 1, productListingId: null, inventoryDisposition: 'INVENTORY', externalProductId: 'ASIN', sourceDescription: 'Example set', sourceSetNumber: '12345', sourceLineNumber: 1, quantity: 2, originalGrossUnitCost: '10.00', originalGrossLineTotal: '20.00', allocatedShipping: '1.00', allocatedDiscount: '0.50', finalLineCost: '20.50', finalUnitCost: '10.250000', receivedAt: null, returnedAt: null }
 const document = { id: 2, purchaseId: 3, partNumber: 1, sourceInvoiceReference: 'INV-1', importHash: 'hash', sourceDocumentDate: '2026-09-20T00:00:00.000Z', importedByUserId: 7, originalGrossMerchandiseTotal: '20.00', shippingTotal: '1.00', discountTotal: '0.50', finalTotalPaid: '20.50', createdAt: '2026-09-20T00:00:00.000Z', updatedAt: '2026-09-20T00:00:00.000Z', purchaseItems: [item] }
 const purchase = { id: 3, sourceOrderReference: 'ORDER-1', sourceOrderDate: '2026-09-20T00:00:00.000Z', merchantName: null, createdAt: '2026-09-20T00:00:00.000Z', updatedAt: '2026-09-20T00:00:00.000Z', purchaseDocuments: [document] }
 const historyPurchase = { ...purchase, purchaseDocuments: [{ ...document, purchaseItems: undefined }] }

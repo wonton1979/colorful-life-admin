@@ -9,7 +9,7 @@ const review = () => parseReview(structuredClone(fixture))
 beforeEach(() => {
   window.adminPurchases = {
     getManualSupplierOptions: vi.fn(), createManual: vi.fn(), importPdf: vi.fn(), list: vi.fn(), get: vi.fn(), review: vi.fn().mockResolvedValue(review()),
-    amend: vi.fn().mockResolvedValue(review()), resolve: vi.fn().mockResolvedValue(review()),
+    amend: vi.fn().mockResolvedValue(review()), resolve: vi.fn().mockResolvedValue(review()), setInventoryDisposition: vi.fn().mockResolvedValue(review()),
     receive: vi.fn().mockResolvedValue(review()), searchProducts: vi.fn().mockResolvedValue([]), createListing: vi.fn(),
     purchaseAnalyticsSummary: vi.fn(), supplierMonthlyAnalytics: vi.fn(),
   }
@@ -23,8 +23,66 @@ it("renders one product with quantity 3, truthful costs and two traceable lines"
   render(<PurchaseReview initialReview={review()} onBack={vi.fn()} />)
   expect(screen.getAllByRole('article')).toHaveLength(1)
   expect(screen.getByRole('button', { name: 'Approve & Receive 3' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Exclude from inventory' })).toBeInTheDocument()
   expect(screen.getByText('Source lines and cost breakdown (2)')).toBeInTheDocument()
   expect(screen.getByText(/Purchase Total/)).toHaveTextContent('£209.97')
+})
+it("excludes an inventory group using the explicit backend disposition and keeps its purchase details visible", async () => {
+  const excluded = review()
+  excluded.groups[0].state = 'EXCLUDED'
+  excluded.groups[0].inventoryDisposition = 'NON_INVENTORY'
+  excluded.groups[0].listing = null
+  excluded.groups[0].lines.forEach(line => { line.inventoryDisposition = 'NON_INVENTORY'; line.productListingId = null })
+  excluded.purchase.purchaseDocuments[0].purchaseItems?.forEach(line => { line.inventoryDisposition = 'NON_INVENTORY'; line.productListingId = null })
+  vi.mocked(window.adminPurchases.setInventoryDisposition).mockResolvedValueOnce(excluded)
+  render(<PurchaseReview initialReview={review()} onBack={vi.fn()} />)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Exclude from inventory' }))
+
+  expect(await screen.findByText('Non-inventory')).toBeInTheDocument()
+  expect(window.adminPurchases.setInventoryDisposition).toHaveBeenCalledWith(1, 101, {
+    revision: 'a'.repeat(64), inventoryDisposition: 'NON_INVENTORY',
+  })
+  expect(screen.getByRole('article', { name: 'Display model' })).toBeInTheDocument()
+  expect(screen.getByRole('article', { name: 'Display model' })).toHaveTextContent('Quantity 3')
+  expect(screen.getByText('Listing: Not required for non-inventory items')).toBeInTheDocument()
+  expect(screen.getByText('Source lines and cost breakdown (2)')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Resolve Listing' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Change Listing' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Approve & Receive/ })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Create .*listing|Create new product/ })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Restore to inventory' })).toBeInTheDocument()
+})
+it("restores a non-inventory item to the normal unresolved listing workflow", async () => {
+  const excluded = review()
+  excluded.groups[0].state = 'EXCLUDED'; excluded.groups[0].inventoryDisposition = 'NON_INVENTORY'; excluded.groups[0].listing = null
+  excluded.groups[0].lines.forEach(line => { line.inventoryDisposition = 'NON_INVENTORY'; line.productListingId = null })
+  const restored = review()
+  restored.groups[0].state = 'UNRESOLVED'; restored.groups[0].inventoryDisposition = 'INVENTORY'; restored.groups[0].listing = null
+  restored.groups[0].lines.forEach(line => { line.inventoryDisposition = 'INVENTORY'; line.productListingId = null })
+  vi.mocked(window.adminPurchases.setInventoryDisposition).mockResolvedValueOnce(restored)
+  render(<PurchaseReview initialReview={excluded} onBack={vi.fn()} />)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Restore to inventory' }))
+
+  expect(await screen.findByText('UNRESOLVED')).toBeInTheDocument()
+  expect(window.adminPurchases.setInventoryDisposition).toHaveBeenCalledWith(1, 101, {
+    revision: 'a'.repeat(64), inventoryDisposition: 'INVENTORY',
+  })
+  expect(screen.getByRole('button', { name: 'Resolve Listing' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Exclude from inventory' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Approve & Receive/ })).not.toBeInTheDocument()
+})
+it("does not change inventory disposition when the backend rejects exclusion", async () => {
+  vi.mocked(window.adminPurchases.setInventoryDisposition).mockRejectedValueOnce(new Error('Disposition could not be saved'))
+  render(<PurchaseReview initialReview={review()} onBack={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Exclude from inventory' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Disposition could not be saved')
+  expect(screen.getByText('MATCHED')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Change Listing' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /Approve & Receive/ })).toBeInTheDocument()
+  expect(screen.queryByText('Non-inventory')).not.toBeInTheDocument()
 })
 it("uses backend weighted cost and received states", () => {
   const r = review(); r.groups[0].costKind = 'WEIGHTED_AVERAGE'; r.groups[0].unitCost = '63.323333'

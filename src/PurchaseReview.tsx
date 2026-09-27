@@ -102,20 +102,36 @@ export default function PurchaseReview({ initialReview, onBack }: { initialRevie
     {error && <p className="error-message" role="alert">{error} Use Refresh review if the purchase has changed.</p>}
     {feedback && <p className="success-message" role="status">{feedback}</p>}
     {pending && <p role="status">Working…</p>}
-    {review.groups.map(group => <article className="purchase-document" key={group.id} aria-label={group.description}>
-      <div className="document-heading"><h3>{group.description}</h3><strong>{group.state}</strong></div>
+    {review.groups.map(group => {
+      const inventoryGroup = group.inventoryDisposition === 'INVENTORY'
+      const nonInventoryGroup = group.inventoryDisposition === 'NON_INVENTORY'
+      const mixedDisposition = group.inventoryDisposition === 'MIXED'
+      const saveDisposition = (inventoryDisposition: 'INVENTORY' | 'NON_INVENTORY') =>
+        void mutate(() => adminPurchases.setInventoryDisposition(purchaseId, group.id, {
+          revision: review.revision, inventoryDisposition,
+        }), inventoryDisposition === 'NON_INVENTORY' ? 'Item excluded from inventory.' : 'Item restored to inventory review.', `disposition-${group.id}`)
+      return <article className="purchase-document" key={group.id} aria-label={group.description}>
+      <div className="document-heading"><h3>{group.description}</h3><strong>{nonInventoryGroup ? <span className="review-disposition">Non-inventory</span> : mixedDisposition ? <span className="review-disposition">Mixed inventory status</span> : group.state}</strong></div>
       <p>{group.externalProductId && <>Product identity: {group.externalProductId} · </>}{group.sourceSetNumber && <>Set: {group.sourceSetNumber}</>}</p>
       <div className="review-facts">
         <span>Quantity <strong>{group.quantity}</strong></span>
         <span>{group.costKind === 'UNIT' ? 'Unit purchase cost' : 'Weighted average unit cost'} <strong>{money(group.unitCost)}</strong></span>
         <span>Total <strong>{money(group.totalCost)}</strong></span>
       </div>
-      <p>Listing: {group.listing ? `${group.listing.condition} / ${group.listing.setNumber} · ${group.listing.title}${group.listing.active ? '' : ' (inactive)'}` : 'Unresolved — select a listing'}</p>
+      <p>Listing: {nonInventoryGroup ? 'Not required for non-inventory items' : mixedDisposition ? 'Resolve the inventory status before listing review' : group.listing ? `${group.listing.condition} / ${group.listing.setNumber} · ${group.listing.title}${group.listing.active ? '' : ' (inactive)'}` : 'Unresolved — select a listing'}</p>
       {group.pendingQuantity !== group.quantity && group.pendingQuantity > 0 && <p>{group.quantity - group.pendingQuantity} already received; {group.pendingQuantity} remaining.</p>}
       <div className="review-actions">
         {group.lines.some(l => l.canAmend) && <button className="button button-secondary" disabled={pending} onClick={() => { setPanel({ id: group.id, kind: 'amend' }); setError('') }}>Amend</button>}
-        {group.canResolve && <button className="button button-secondary" disabled={pending} aria-busy={pendingAction === `load-listings-${group.id}`} onClick={() => void openResolution(group)}>{pendingAction === `load-listings-${group.id}` ? 'Loading listings…' : group.listing ? 'Change Listing' : 'Resolve Listing'}</button>}
-        {group.state === 'MATCHED' && group.listing?.active && <button className="button button-primary" disabled={pending} onClick={() => {
+        {inventoryGroup && group.canResolve && <>
+          <button className="button button-secondary" disabled={pending} aria-busy={pendingAction === `load-listings-${group.id}`} onClick={() => void openResolution(group)}>{pendingAction === `load-listings-${group.id}` ? 'Loading listings…' : group.listing ? 'Change Listing' : 'Resolve Listing'}</button>
+          <button className="button button-secondary" disabled={pending} aria-busy={pendingAction === `disposition-${group.id}`} onClick={() => saveDisposition('NON_INVENTORY')}>{pendingAction === `disposition-${group.id}` ? 'Saving…' : 'Exclude from inventory'}</button>
+        </>}
+        {nonInventoryGroup && group.canResolve && <button className="button button-secondary" disabled={pending} aria-busy={pendingAction === `disposition-${group.id}`} onClick={() => saveDisposition('INVENTORY')}>{pendingAction === `disposition-${group.id}` ? 'Saving…' : 'Restore to inventory'}</button>}
+        {mixedDisposition && group.canResolve && <>
+          <button className="button button-secondary" disabled={pending} aria-busy={pendingAction === `disposition-${group.id}`} onClick={() => saveDisposition('NON_INVENTORY')}>{pendingAction === `disposition-${group.id}` ? 'Saving…' : 'Exclude from inventory'}</button>
+          <button className="button button-secondary" disabled={pending} aria-busy={pendingAction === `disposition-${group.id}`} onClick={() => saveDisposition('INVENTORY')}>{pendingAction === `disposition-${group.id}` ? 'Saving…' : 'Restore to inventory'}</button>
+        </>}
+        {inventoryGroup && group.state === 'MATCHED' && group.listing?.active && <button className="button button-primary" disabled={pending} onClick={() => {
           if (window.confirm(`Approve and receive ${group.pendingQuantity} units into ${group.listing?.condition} / ${group.listing?.setNumber}? This cannot be amended afterward.`))
             void mutate(() => adminPurchases.receive(purchaseId, group.id, { revision: review.revision }), 'Purchase item received into inventory.', `receive-${group.id}`)
         }} aria-busy={pendingAction === `receive-${group.id}`}>{pendingAction === `receive-${group.id}` ? 'Receiving…' : <>Approve &amp; Receive {group.pendingQuantity}</>}</button>}
@@ -126,7 +142,7 @@ export default function PurchaseReview({ initialReview, onBack }: { initialRevie
           mutate(() => adminPurchases.amend(purchaseId, line.id, { ...input, revision: review.revision }), 'Source line amended; costs recalculated where required.', `amend-${line.id}`)} />)}
         <button className="button button-secondary" disabled={pending} onClick={() => setPanel(null)}>Cancel amendment</button>
       </div>}
-      {panel?.id === group.id && panel.kind === 'resolve' && <div className="review-editor">
+      {inventoryGroup && panel?.id === group.id && panel.kind === 'resolve' && <div className="review-editor">
         <label>Search listings by set number or title<input value={query} onChange={e => { setQuery(e.target.value); setSelectedListing('') }} disabled={pending} /></label>
         {loadedListings && <>
           <label>Product listing<select value={selectedListing} onChange={e => setSelectedListing(e.target.value)} disabled={pending}>
@@ -152,7 +168,8 @@ export default function PurchaseReview({ initialReview, onBack }: { initialRevie
             <span>Shipping {money(line.allocatedShipping)}</span><span>Discount −{money(line.allocatedDiscount)}</span><strong>Final {money(line.finalLineCost)}</strong></div>
         </div>)}
       </details>
-    </article>)}
+    </article>
+    })}
     <p className="review-total">Purchase Total: <strong>{money(review.totalCost)}</strong></p>
     <details><summary>Document references and totals</summary>{review.purchase.purchaseDocuments.map(doc =>
       <div className="purchase-document" key={doc.id}><h3>Document {doc.partNumber}</h3>

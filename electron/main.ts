@@ -5,7 +5,7 @@ import { AuthError, AuthService } from './auth-service.js'
 import type { LoginCredentials } from './auth-contract.js'
 import { isCreateProductRequest, isImageUploadPayload, isProductMetadataUpdate, ProductError, ProductService } from './product-service.js'
 import { CategoryError, CategoryService, validateCategoryCreate } from './category-service.js'
-import { PurchaseError, PurchaseService, validateAmendment, validateReceipt, validateResolution, validateListingCreation } from './purchase-service.js'
+import { PurchaseError, PurchaseService, validateAmendment, validateReceipt, validateResolution, validateInventoryDisposition, validateListingCreation } from './purchase-service.js'
 import type { ManualPurchaseInput } from './purchase-contract.js'
 import { handleEditContextMenu } from './edit-context-menu.js'
 import { serializeIpcError } from './ipc-error-contract.js'
@@ -159,6 +159,7 @@ handleIpc('admin-purchases:supplier-monthly-analytics', (_event, supplierKey: un
 handleIpc('admin-purchases:review', (_event, id: unknown) => purchaseService.review(validatePurchaseId(id)))
 handleIpc('admin-purchases:amend', (_event, id: unknown, itemId: unknown, input: unknown) => purchaseService.amend(validatePurchaseId(id), validatePurchaseId(itemId), validateAmendment(input)))
 handleIpc('admin-purchases:resolve', (_event, id: unknown, groupId: unknown, input: unknown) => purchaseService.resolve(validatePurchaseId(id), validatePurchaseId(groupId), validateResolution(input)))
+handleIpc('admin-purchases:set-inventory-disposition', (_event, id: unknown, groupId: unknown, input: unknown) => purchaseService.setInventoryDisposition(validatePurchaseId(id), validatePurchaseId(groupId), validateInventoryDisposition(input)))
 handleIpc('admin-purchases:receive', (_event, id: unknown, groupId: unknown, input: unknown) => purchaseService.receive(validatePurchaseId(id), validatePurchaseId(groupId), validateReceipt(input)))
 handleIpc('admin-purchases:search-products', (_event, id: unknown, query: unknown) => {
   if (typeof query !== 'string' || !query.trim() || query.length > 100) throw new PurchaseError('validation', 'Enter a product search')
