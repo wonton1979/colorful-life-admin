@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest'
 import { CategoryError, CategoryService, validateCategoryCreate } from '../electron/category-service'
 import type { AuthService } from '../electron/auth-service'
 
-const category = { id: 8, name: 'Technic', subtitle: null, description: null, imageUrl: null, imagePublicId: null }
+const category = { id: 8, name: 'Technic', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }
 
 it('normalizes optional category text and posts the category contract', async () => {
   const authenticatedFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(category), { status: 201 }))
@@ -12,6 +12,47 @@ it('normalizes optional category text and posts the category contract', async ()
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: 'Technic', subtitle: null, description: null }),
   })
+})
+
+it('parses populated and nullable catalogue thumbnail fields without changing opening artwork', async () => {
+  const populated = { ...category, imageUrl: 'https://cdn.example/opening.jpg', imagePublicId: 'category-artwork/8-opening', thumbnailUrl: 'https://cdn.example/thumbnail.jpg', thumbnailPublicId: 'category-thumbnail/8-thumb' }
+  const authenticatedFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify([populated, category]), { status: 200 }))
+  const service = new CategoryService({ authenticatedFetch } as unknown as AuthService)
+
+  await expect(service.list()).resolves.toEqual([populated, category])
+  expect(authenticatedFetch).toHaveBeenCalledWith('/admin/categories')
+})
+
+it('uploads, replaces, and deletes thumbnail artwork through the Backend thumbnail-artwork endpoint', async () => {
+  const uploaded = { ...category, imageUrl: 'https://cdn.example/opening.jpg', imagePublicId: 'category-artwork/8-opening', thumbnailUrl: 'https://cdn.example/thumbnail.jpg', thumbnailPublicId: 'category-thumbnail/8-thumb' }
+  const deleted = { ...uploaded, thumbnailUrl: null, thumbnailPublicId: null }
+  const authenticatedFetch = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify(uploaded), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify(deleted), { status: 200 }))
+  const service = new CategoryService({ authenticatedFetch } as unknown as AuthService)
+  const image = { bytes: new Uint8Array([1, 2, 3]), filename: 'thumbnail.png', mimeType: 'image/png' }
+
+  await expect(service.uploadThumbnailArtwork(8, image)).resolves.toEqual(uploaded)
+  await expect(service.removeThumbnailArtwork(8)).resolves.toEqual(deleted)
+  expect(authenticatedFetch).toHaveBeenNthCalledWith(1, '/admin/categories/8/thumbnail-artwork', expect.objectContaining({ method: 'PUT', body: expect.any(FormData) }))
+  const form = authenticatedFetch.mock.calls[0][1].body as FormData
+  expect((form.get('file') as File).name).toBe('thumbnail.png')
+  expect(authenticatedFetch).toHaveBeenNthCalledWith(2, '/admin/categories/8/thumbnail-artwork', { method: 'DELETE' })
+})
+
+it('keeps category opening artwork upload and delete on the existing artwork endpoint', async () => {
+  const openingArtwork = { ...category, imageUrl: 'https://cdn.example/opening.jpg', imagePublicId: 'category-artwork/8-opening' }
+  const authenticatedFetch = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify(openingArtwork), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify(category), { status: 200 }))
+  const service = new CategoryService({ authenticatedFetch } as unknown as AuthService)
+
+  await service.uploadArtwork(8, { bytes: new Uint8Array([4]), filename: 'opening.jpg', mimeType: 'image/jpeg' })
+  await service.removeArtwork(8)
+  expect(authenticatedFetch.mock.calls.map(([path, init]) => [path, init?.method])).toEqual([
+    ['/admin/categories/8/artwork', 'PUT'],
+    ['/admin/categories/8/artwork', 'DELETE'],
+  ])
 })
 
 it('validates and trims create payload fields at the Electron boundary', () => {

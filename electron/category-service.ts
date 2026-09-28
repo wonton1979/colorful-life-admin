@@ -16,8 +16,8 @@ const isString = (value: unknown): value is string => typeof value === 'string'
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
 
 const parseCategory = (value: unknown): AdminCategory => {
-  if (!isRecord(value) || !isNumber(value.id) || !isString(value.name) || (!isString(value.subtitle) && value.subtitle !== null) || (!isString(value.description) && value.description !== null) || (!isString(value.imageUrl) && value.imageUrl !== null) || (!isString(value.imagePublicId) && value.imagePublicId !== null)) throw new CategoryError('malformed-response', 'The server returned an invalid category response.')
-  return { id: value.id, name: value.name, subtitle: value.subtitle, description: value.description, imageUrl: value.imageUrl, imagePublicId: value.imagePublicId }
+  if (!isRecord(value) || !isNumber(value.id) || !isString(value.name) || (!isString(value.subtitle) && value.subtitle !== null) || (!isString(value.description) && value.description !== null) || (!isString(value.imageUrl) && value.imageUrl !== null) || (!isString(value.imagePublicId) && value.imagePublicId !== null) || (!isString(value.thumbnailUrl) && value.thumbnailUrl !== null) || (!isString(value.thumbnailPublicId) && value.thumbnailPublicId !== null)) throw new CategoryError('malformed-response', 'The server returned an invalid category response.')
+  return { id: value.id, name: value.name, subtitle: value.subtitle, description: value.description, imageUrl: value.imageUrl, imagePublicId: value.imagePublicId, thumbnailUrl: value.thumbnailUrl, thumbnailPublicId: value.thumbnailPublicId }
 }
 
 export class CategoryService implements AdminCategoriesApi {
@@ -40,6 +40,17 @@ export class CategoryService implements AdminCategoriesApi {
 
   async removeArtwork(categoryId: number) {
     const response = await this.auth.authenticatedFetch(`/admin/categories/${categoryId}/artwork`, { method: 'DELETE' })
+    return this.parseMutation(response)
+  }
+
+  async uploadThumbnailArtwork(categoryId: number, image: { bytes: Uint8Array; filename: string; mimeType: string }) {
+    const form = new FormData(); form.append('file', new Blob([image.bytes.buffer as ArrayBuffer], { type: image.mimeType }), image.filename)
+    const response = await this.auth.authenticatedFetch(`/admin/categories/${categoryId}/thumbnail-artwork`, { method: 'PUT', body: form })
+    return this.parseMutation(response)
+  }
+
+  async removeThumbnailArtwork(categoryId: number) {
+    const response = await this.auth.authenticatedFetch(`/admin/categories/${categoryId}/thumbnail-artwork`, { method: 'DELETE' })
     return this.parseMutation(response)
   }
 

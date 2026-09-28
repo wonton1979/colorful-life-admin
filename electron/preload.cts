@@ -53,6 +53,8 @@ const adminCategories: AdminCategoriesApi = {
   update: (categoryId, update) => forwardIpcResult(ipcRenderer.invoke('admin-categories:update', categoryId, update)),
   uploadArtwork: (categoryId, image) => forwardIpcResult(ipcRenderer.invoke('admin-categories:upload-artwork', categoryId, image)),
   removeArtwork: (categoryId) => forwardIpcResult(ipcRenderer.invoke('admin-categories:remove-artwork', categoryId)),
+  uploadThumbnailArtwork: (categoryId, image) => forwardIpcResult(ipcRenderer.invoke('admin-categories:upload-thumbnail-artwork', categoryId, image)),
+  removeThumbnailArtwork: (categoryId) => forwardIpcResult(ipcRenderer.invoke('admin-categories:remove-thumbnail-artwork', categoryId)),
 }
 
 contextBridge.exposeInMainWorld('adminCategories', adminCategories)

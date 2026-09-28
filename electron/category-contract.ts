@@ -5,6 +5,8 @@ export interface AdminCategory {
   description: string | null
   imageUrl: string | null
   imagePublicId: string | null
+  thumbnailUrl: string | null
+  thumbnailPublicId: string | null
 }
 
 export interface CategoryTextUpdate {
@@ -21,4 +23,6 @@ export interface AdminCategoriesApi {
   update(categoryId: number, update: CategoryTextUpdate): Promise<AdminCategory>
   uploadArtwork(categoryId: number, image: { bytes: Uint8Array; filename: string; mimeType: string }): Promise<AdminCategory>
   removeArtwork(categoryId: number): Promise<AdminCategory>
+  uploadThumbnailArtwork(categoryId: number, image: { bytes: Uint8Array; filename: string; mimeType: string }): Promise<AdminCategory>
+  removeThumbnailArtwork(categoryId: number): Promise<AdminCategory>
 }

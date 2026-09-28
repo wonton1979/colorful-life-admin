@@ -15,7 +15,7 @@ beforeEach(() => {
   }
   window.adminProducts = { createProduct: vi.fn(), listProducts: vi.fn().mockResolvedValue([]), listAdminProductListings: vi.fn().mockResolvedValue([]), updateProductMetadata: vi.fn(), listProductImages: vi.fn().mockResolvedValue([]), uploadProductImage: vi.fn(), reorderProductImages: vi.fn().mockResolvedValue([]), updateProductImageAltText: vi.fn(), deleteProductImage: vi.fn(),
     setFeatureProduct: vi.fn(), uploadCatalogueArtwork: vi.fn(), removeCatalogueArtwork: vi.fn(), searchLegoProducts: vi.fn().mockResolvedValue({ items: [], pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 } }), createUsedOffer: vi.fn() }
-  window.adminCategories = { list: vi.fn().mockResolvedValue([]), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn() }
+  window.adminCategories = { list: vi.fn().mockResolvedValue([]), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn(), uploadThumbnailArtwork: vi.fn(), removeThumbnailArtwork: vi.fn() }
   vi.spyOn(window, 'confirm').mockReturnValue(true)
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
@@ -221,7 +221,7 @@ it("prefills a new purchase product and links the created listing back to the re
   const r = review(); r.groups[0].state = 'UNRESOLVED'; r.groups[0].listing = null
   const refreshed = review(); refreshed.groups[0].state = 'MATCHED'; refreshed.groups[0].listing = { id: 88, setNumber: '75446', title: 'Clean Grogu', condition: 'NEW', active: true }
   const listing = { id: 88 } as ProductListing
-  vi.mocked(window.adminCategories.list).mockResolvedValue([{ id: 1, name: 'Star Wars', subtitle: null, description: null, imageUrl: null, imagePublicId: null }])
+  vi.mocked(window.adminCategories.list).mockResolvedValue([{ id: 1, name: 'Star Wars', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }])
   vi.mocked(window.adminPurchases.createListing).mockResolvedValue(listing)
   vi.mocked(window.adminPurchases.resolve).mockResolvedValue(refreshed)
   render(<PurchaseReview initialReview={r} onBack={vi.fn()} />)

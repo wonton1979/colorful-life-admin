@@ -8,7 +8,7 @@ const product: ProductListing = {
   createdAt: '2026-01-01', updatedAt: '2026-01-01',
   legoProduct: { id: 456, setNumber: '60325', title: 'Example Set', description: null, theme: 'City', ageRecommendation: '6+', pieceCount: 235, isRetired: false, isFeatureProduct: false, catalogueArtworkUrl: null, catalogueArtworkPublicId: null, productImages: [], createdAt: '2026-01-01', updatedAt: '2026-01-01' },
 }
-const categories = [{ id: 11, name: 'Vehicles', subtitle: null, description: null, imageUrl: null, imagePublicId: null }, { id: 29, name: 'Juniors', subtitle: null, description: null, imageUrl: null, imagePublicId: null }]
+const categories = [{ id: 11, name: 'Vehicles', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }, { id: 29, name: 'Juniors', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }]
 
 const fillRequiredFields = async () => {
   await screen.findByRole('option', { name: 'Vehicles' })
@@ -36,7 +36,7 @@ describe('AddProduct workflow', () => {
   beforeEach(() => {
     vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:test'), revokeObjectURL: vi.fn() })
     window.adminProducts = { createProduct: vi.fn().mockResolvedValue(product), listProducts: vi.fn().mockResolvedValue([]), listAdminProductListings: vi.fn().mockResolvedValue([]), updateProductMetadata: vi.fn(), listProductImages: vi.fn().mockResolvedValue([]), uploadProductImage: vi.fn().mockResolvedValue({ id: 1, legoProductId: 456, url: 'https://cdn.test/image.jpg', publicId: 'image', altText: null, sortOrder: 0, createdAt: '2026-01-01' }), reorderProductImages: vi.fn().mockResolvedValue([]), updateProductImageAltText: vi.fn(), deleteProductImage: vi.fn(), setFeatureProduct: vi.fn(), uploadCatalogueArtwork: vi.fn(), removeCatalogueArtwork: vi.fn(), searchLegoProducts: vi.fn().mockResolvedValue(lookupPage([])), createUsedOffer: vi.fn().mockResolvedValue(usedOffer) }
-    window.adminCategories = { list: vi.fn().mockResolvedValue(categories), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn() }
+    window.adminCategories = { list: vi.fn().mockResolvedValue(categories), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn(), uploadThumbnailArtwork: vi.fn(), removeThumbnailArtwork: vi.fn() }
   })
 
   afterEach(() => cleanup())

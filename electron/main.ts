@@ -130,6 +130,11 @@ handleIpc('admin-categories:upload-artwork', async (_event, categoryId: unknown,
   return categoryService.uploadArtwork(validateCategoryId(categoryId), image)
 })
 handleIpc('admin-categories:remove-artwork', async (_event, categoryId: unknown) => categoryService.removeArtwork(validateCategoryId(categoryId)))
+handleIpc('admin-categories:upload-thumbnail-artwork', async (_event, categoryId: unknown, image: unknown) => {
+  if (!isImageUploadPayload(image)) throw new CategoryError('validation', 'Invalid category thumbnail artwork.')
+  return categoryService.uploadThumbnailArtwork(validateCategoryId(categoryId), image)
+})
+handleIpc('admin-categories:remove-thumbnail-artwork', async (_event, categoryId: unknown) => categoryService.removeThumbnailArtwork(validateCategoryId(categoryId)))
 
 const validatePurchaseId = (purchaseId: unknown): number => {
   if (typeof purchaseId !== 'number' || !Number.isInteger(purchaseId) || purchaseId <= 0) throw new PurchaseError('validation', 'Invalid purchase.')

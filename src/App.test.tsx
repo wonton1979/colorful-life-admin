@@ -33,7 +33,7 @@ describe('App authentication flow', () => {
       searchLegoProducts: vi.fn().mockResolvedValue({ items: [], pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 } }),
       createUsedOffer: vi.fn(),
     }
-    window.adminCategories = { list: vi.fn().mockResolvedValue([{ id: 4, name: 'City', subtitle: null, description: null, imageUrl: null, imagePublicId: null }]), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn() }
+    window.adminCategories = { list: vi.fn().mockResolvedValue([{ id: 4, name: 'City', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }]), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn(), uploadThumbnailArtwork: vi.fn(), removeThumbnailArtwork: vi.fn() }
   })
 
   it('shows the unauthenticated login screen and submits credentials', async () => {
@@ -245,8 +245,8 @@ describe('App authentication flow', () => {
   })
 
   it('syncs Presentation Management to the created product category using the backend category ID', async () => {
-    const harryPotter = { id: 87, name: 'Harry Potter', subtitle: 'Magic in every build', description: null, imageUrl: null, imagePublicId: null }
-    window.adminCategories.list = vi.fn().mockResolvedValue([{ id: 4, name: 'City', subtitle: null, description: null, imageUrl: null, imagePublicId: null }, harryPotter])
+    const harryPotter = { id: 87, name: 'Harry Potter', subtitle: 'Magic in every build', description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }
+    window.adminCategories.list = vi.fn().mockResolvedValue([{ id: 4, name: 'City', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }, harryPotter])
     const createdProduct = {
       id: 321, legoProductId: 654, colorfulLifeCategory: 'HARRY_POTTER' as const, category: harryPotter,
       condition: 'NEW' as const, originalPrice: '19.99', salePrice: null, currentStock: 1, availableStock: 1, createdAt: '2026-01-01', updatedAt: '2026-01-01',
@@ -276,8 +276,8 @@ describe('App authentication flow', () => {
 
   it('syncs Presentation Management to the selected LegoProduct category after a Used offer is created', async () => {
     window.adminAuth.restore = vi.fn().mockResolvedValue(adminSession)
-    const harryPotter = { id: 87, name: 'Harry Potter', subtitle: 'Magic in every build', description: null, imageUrl: null, imagePublicId: null }
-    window.adminCategories.list = vi.fn().mockResolvedValue([{ id: 4, name: 'City', subtitle: null, description: null, imageUrl: null, imagePublicId: null }, harryPotter])
+    const harryPotter = { id: 87, name: 'Harry Potter', subtitle: 'Magic in every build', description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }
+    window.adminCategories.list = vi.fn().mockResolvedValue([{ id: 4, name: 'City', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }, harryPotter])
     window.adminProducts.searchLegoProducts = vi.fn().mockResolvedValue({ items: [{ id: 456, setNumber: '75966', title: 'Existing Harry Potter Set', description: null, theme: 'Harry Potter', ageRecommendation: '8+', pieceCount: 754, category: { id: 87, name: 'Harry Potter' }, isRetired: false, usedOfferStatus: 'NONE' as const }], pagination: { page: 1, pageSize: 20, totalItems: 1, totalPages: 1 } })
     window.adminProducts.createUsedOffer = vi.fn().mockResolvedValue({ id: 77, legoProductId: 456, condition: 'USED_LIKE_NEW' as const, originalPrice: '45.00', salePrice: null, currentStock: 1 as const, usedLifecycle: 'AVAILABLE' as const, damageDescription: 'Creased box' })
     window.adminProducts.listAdminProductListings = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([{
