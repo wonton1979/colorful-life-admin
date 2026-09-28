@@ -38,9 +38,9 @@ describe('ProductEditor', () => {
     imageOperationOrder = []
     window.adminCategories = {
       list: vi.fn().mockResolvedValue([
-        { id: 11, name: 'Vehicles', subtitle: null, description: null, imageUrl: null, imagePublicId: null },
-        { id: 29, name: 'Juniors', subtitle: null, description: null, imageUrl: null, imagePublicId: null },
-      ]), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn(),
+        { id: 11, name: 'Vehicles', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null },
+        { id: 29, name: 'Juniors', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null },
+      ]), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn(), uploadThumbnailArtwork: vi.fn(), removeThumbnailArtwork: vi.fn(),
     }
     window.adminProducts = {
       createProduct: vi.fn(),

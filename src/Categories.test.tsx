@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AdminCategory } from '../electron/category-contract.js'
 import Categories from './Categories'
 
-const category = (overrides: Partial<AdminCategory> = {}): AdminCategory => ({ id: 1, name: 'City', subtitle: 'Every street tells a story', description: 'Explore the city.', imageUrl: null, imagePublicId: null, ...overrides })
+const category = (overrides: Partial<AdminCategory> = {}): AdminCategory => ({ id: 1, name: 'City', subtitle: 'Every street tells a story', description: 'Explore the city.', imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null, ...overrides })
 
 describe('Categories', () => {
   afterEach(() => cleanup())
@@ -14,12 +14,17 @@ describe('Categories', () => {
       update: vi.fn().mockResolvedValue(category({ name: 'Updated City', subtitle: 'Updated subtitle' })),
       uploadArtwork: vi.fn().mockResolvedValue(category({ imageUrl: 'https://cdn.example/city.jpg', imagePublicId: 'category-artwork/1-a' })),
       removeArtwork: vi.fn().mockResolvedValue(category()),
+      uploadThumbnailArtwork: vi.fn().mockResolvedValue(category({ thumbnailUrl: 'https://cdn.example/city-thumbnail.jpg', thumbnailPublicId: 'category-thumbnail/1-a' })),
+      removeThumbnailArtwork: vi.fn().mockResolvedValue(category()),
     }
   })
 
   it('renders API categories, edits a local draft, and cancel discards it', async () => {
     render(<Categories />)
     expect(await screen.findByRole('heading', { name: 'City' })).toBeInTheDocument()
+    const categoryCard = screen.getByRole('heading', { name: 'City' }).closest('article')!
+    expect(within(categoryCard).getByRole('region', { name: 'Catalogue Thumbnail' })).toHaveTextContent('No catalogue thumbnail')
+    expect(within(categoryCard).getByRole('button', { name: 'Edit details' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: 'Edit details' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Draft City' } })
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -55,18 +60,98 @@ describe('Categories', () => {
     expect(screen.getByLabelText('Name')).toHaveValue('Useful draft')
   })
 
-  it('uploads, previews, replaces, and removes artwork through the bridge', async () => {
+  it('uploads, previews, replaces, and removes opening artwork without changing the catalogue thumbnail', async () => {
+    const existingThumbnail = 'https://cdn.example/city-thumbnail.jpg'
+    window.adminCategories.list = vi.fn().mockResolvedValue([category({ thumbnailUrl: existingThumbnail, thumbnailPublicId: 'category-thumbnail/1-a' })])
+    window.adminCategories.uploadArtwork = vi.fn().mockResolvedValue(category({ imageUrl: 'https://cdn.example/city.jpg', imagePublicId: 'category-artwork/1-a' }))
+    window.adminCategories.removeArtwork = vi.fn().mockResolvedValue(category())
     render(<Categories />)
     await screen.findByRole('heading', { name: 'City' })
-    const input = screen.getByLabelText('Upload artwork')
+    const card = screen.getByRole('heading', { name: 'City' }).closest('article')!
+    const thumbnailSection = within(card).getByRole('region', { name: 'Catalogue Thumbnail' })
+    expect(within(thumbnailSection).getByAltText('Catalogue Thumbnail for City')).toHaveAttribute('src', existingThumbnail)
+    const input = within(card).getByLabelText('Upload opening artwork')
     fireEvent.change(input, { target: { files: [new File([new Uint8Array([1, 2, 3])], 'city.png', { type: 'image/png' })] } })
     await waitFor(() => expect(window.adminCategories.uploadArtwork).toHaveBeenCalledWith(1, expect.objectContaining({ filename: 'city.png', mimeType: 'image/png', bytes: expect.any(Uint8Array) })))
-    expect(await screen.findByAltText('Artwork for City')).toHaveAttribute('src', 'https://cdn.example/city.jpg')
-    expect(screen.getByLabelText('Replace artwork')).toBeInTheDocument()
+    expect(await screen.findByAltText('Category Opening Artwork for City')).toHaveAttribute('src', 'https://cdn.example/city.jpg')
+    expect(within(thumbnailSection).getByAltText('Catalogue Thumbnail for City')).toHaveAttribute('src', existingThumbnail)
+    expect(within(card).getByLabelText('Replace opening artwork')).toBeInTheDocument()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Remove artwork' }))
+    fireEvent.click(within(card).getByRole('button', { name: 'Remove opening artwork' }))
     await waitFor(() => expect(window.adminCategories.removeArtwork).toHaveBeenCalledWith(1))
-    expect(screen.getByText('No artwork')).toBeInTheDocument()
+    expect(within(card).getByText('No opening artwork')).toBeInTheDocument()
+    expect(within(thumbnailSection).getByAltText('Catalogue Thumbnail for City')).toHaveAttribute('src', existingThumbnail)
+  })
+
+  it('uploads, replaces, and deletes the catalogue thumbnail independently of opening artwork', async () => {
+    const openingArtwork = 'https://cdn.example/city-opening.jpg'
+    const initial = category({ imageUrl: openingArtwork, imagePublicId: 'category-artwork/1-opening' })
+    window.adminCategories.list = vi.fn().mockResolvedValue([initial])
+    window.adminCategories.uploadThumbnailArtwork = vi.fn()
+      .mockResolvedValueOnce({ ...initial, thumbnailUrl: 'https://cdn.example/city-thumbnail-a.jpg', thumbnailPublicId: 'category-thumbnail/1-a' })
+      .mockResolvedValueOnce({ ...initial, thumbnailUrl: 'https://cdn.example/city-thumbnail-b.jpg', thumbnailPublicId: 'category-thumbnail/1-b' })
+    window.adminCategories.removeThumbnailArtwork = vi.fn().mockResolvedValue(initial)
+    render(<Categories />)
+    await screen.findByRole('heading', { name: 'City' })
+    const card = screen.getByRole('heading', { name: 'City' }).closest('article')!
+    const openingSection = within(card).getByRole('region', { name: 'Category Opening Artwork' })
+    const thumbnailSection = within(card).getByRole('region', { name: 'Catalogue Thumbnail' })
+
+    fireEvent.change(within(thumbnailSection).getByLabelText('Upload catalogue thumbnail'), { target: { files: [new File([new Uint8Array([1])], 'thumb-a.png', { type: 'image/png' })] } })
+    expect(await within(thumbnailSection).findByAltText('Catalogue Thumbnail for City')).toHaveAttribute('src', 'https://cdn.example/city-thumbnail-a.jpg')
+    expect(within(openingSection).getByAltText('Category Opening Artwork for City')).toHaveAttribute('src', openingArtwork)
+
+    fireEvent.change(within(thumbnailSection).getByLabelText('Replace catalogue thumbnail'), { target: { files: [new File([new Uint8Array([2])], 'thumb-b.png', { type: 'image/png' })] } })
+    expect(await within(thumbnailSection).findByAltText('Catalogue Thumbnail for City')).toHaveAttribute('src', 'https://cdn.example/city-thumbnail-b.jpg')
+    expect(within(openingSection).getByAltText('Category Opening Artwork for City')).toHaveAttribute('src', openingArtwork)
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    fireEvent.click(within(thumbnailSection).getByRole('button', { name: 'Remove catalogue thumbnail' }))
+    await waitFor(() => expect(window.adminCategories.removeThumbnailArtwork).toHaveBeenCalledWith(1))
+    expect(within(thumbnailSection).getByText('No catalogue thumbnail')).toBeInTheDocument()
+    expect(within(openingSection).getByAltText('Category Opening Artwork for City')).toHaveAttribute('src', openingArtwork)
+  })
+
+  it('keeps a saved catalogue thumbnail visible when a thumbnail upload fails', async () => {
+    const existingThumbnail = 'https://cdn.example/existing-thumbnail.jpg'
+    window.adminCategories.list = vi.fn().mockResolvedValue([category({ thumbnailUrl: existingThumbnail, thumbnailPublicId: 'category-thumbnail/1-existing' })])
+    window.adminCategories.uploadThumbnailArtwork = vi.fn().mockRejectedValue(new Error('Thumbnail upload failed'))
+    render(<Categories />)
+    await screen.findByRole('heading', { name: 'City' })
+    const thumbnailSection = screen.getByRole('region', { name: 'Catalogue Thumbnail' })
+    fireEvent.change(within(thumbnailSection).getByLabelText('Replace catalogue thumbnail'), { target: { files: [new File([new Uint8Array([2])], 'new-thumb.png', { type: 'image/png' })] } })
+    expect(await screen.findByRole('alert')).toHaveTextContent('Thumbnail upload failed')
+    expect(within(thumbnailSection).getByAltText('Catalogue Thumbnail for City')).toHaveAttribute('src', existingThumbnail)
+  })
+
+  it('blocks duplicate thumbnail uploads while leaving the opening artwork control usable', async () => {
+    const openingArtwork = 'https://cdn.example/old-opening.jpg'
+    const initial = category({ imageUrl: openingArtwork, imagePublicId: 'category-artwork/1-opening' })
+    window.adminCategories.list = vi.fn().mockResolvedValue([initial])
+    let finishThumbnail: (saved: AdminCategory) => void = () => undefined
+    window.adminCategories.uploadThumbnailArtwork = vi.fn().mockImplementation(() => new Promise<AdminCategory>(resolve => { finishThumbnail = resolve }))
+    const nextOpeningArtwork = 'https://cdn.example/new-opening.jpg'
+    window.adminCategories.uploadArtwork = vi.fn().mockResolvedValue({ ...initial, imageUrl: nextOpeningArtwork, imagePublicId: 'category-artwork/1-new' })
+    render(<Categories />)
+    await screen.findByRole('heading', { name: 'City' })
+    const card = screen.getByRole('heading', { name: 'City' }).closest('article')!
+    const thumbnailSection = within(card).getByRole('region', { name: 'Catalogue Thumbnail' })
+    const openingSection = within(card).getByRole('region', { name: 'Category Opening Artwork' })
+    const thumbnailInput = within(thumbnailSection).getByLabelText('Upload catalogue thumbnail')
+    const thumbnailFile = new File([new Uint8Array([1])], 'thumbnail.png', { type: 'image/png' })
+    fireEvent.change(thumbnailInput, { target: { files: [thumbnailFile] } })
+    expect(await within(thumbnailSection).findByText('Uploading…')).toBeInTheDocument()
+    fireEvent.change(thumbnailInput, { target: { files: [thumbnailFile] } })
+    expect(window.adminCategories.uploadThumbnailArtwork).toHaveBeenCalledOnce()
+
+    const openingInput = within(openingSection).getByLabelText('Replace opening artwork')
+    expect(openingInput).toBeEnabled()
+    fireEvent.change(openingInput, { target: { files: [new File([new Uint8Array([3])], 'opening.png', { type: 'image/png' })] } })
+    expect(await within(openingSection).findByAltText('Category Opening Artwork for City')).toHaveAttribute('src', nextOpeningArtwork)
+
+    finishThumbnail({ ...initial, thumbnailUrl: 'https://cdn.example/new-thumbnail.jpg', thumbnailPublicId: 'category-thumbnail/1-new' })
+    expect(await within(thumbnailSection).findByAltText('Catalogue Thumbnail for City')).toHaveAttribute('src', 'https://cdn.example/new-thumbnail.jpg')
+    expect(within(openingSection).getByAltText('Category Opening Artwork for City')).toHaveAttribute('src', nextOpeningArtwork)
   })
 
   it('does not show an empty result when loading fails', async () => {
@@ -102,7 +187,8 @@ describe('Categories', () => {
     expect(window.adminCategories.create).toHaveBeenCalledWith({ name: 'Technic', subtitle: 'Built for motion', description: 'Mechanical builds.' })
     expect(screen.getByText('Built for motion')).toBeInTheDocument()
     expect(screen.getByText('Mechanical builds.')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Technic' }).closest('article')).toHaveTextContent('No artwork')
+    expect(screen.getByRole('heading', { name: 'Technic' }).closest('article')).toHaveTextContent('No opening artwork')
+    expect(screen.getByRole('heading', { name: 'Technic' }).closest('article')).toHaveTextContent('No catalogue thumbnail')
     expect(screen.getAllByRole('heading', { level: 3 }).map(heading => heading.textContent)).toEqual(['City', 'Technic', 'Existing artwork'])
   })
 
@@ -134,14 +220,14 @@ describe('Categories', () => {
     await screen.findByRole('heading', { name: 'Plain A' })
     const names = () => screen.getAllByRole('heading', { level: 3 }).map(heading => heading.textContent)
     expect(names()).toEqual(['Plain A', 'Plain B', 'Art A', 'Art B'])
-    const uploadInput = screen.getAllByLabelText('Upload artwork')[0]
+    const uploadInput = screen.getAllByLabelText('Upload opening artwork')[0]
     fireEvent.change(uploadInput, { target: { files: [new File([new Uint8Array([1])], 'plain-a.png', { type: 'image/png' })] } })
     await waitFor(() => expect(names()).toEqual(['Plain B', 'Plain A', 'Art A', 'Art B']))
     const plainA = screen.getByRole('heading', { name: 'Plain A' }).closest('article')!
-    fireEvent.change(within(plainA).getByLabelText('Replace artwork'), { target: { files: [new File([new Uint8Array([2])], 'plain-a-replacement.png', { type: 'image/png' })] } })
+    fireEvent.change(within(plainA).getByLabelText('Replace opening artwork'), { target: { files: [new File([new Uint8Array([2])], 'plain-a-replacement.png', { type: 'image/png' })] } })
     await waitFor(() => expect(window.adminCategories.uploadArtwork).toHaveBeenCalledTimes(2))
     expect(names()).toEqual(['Plain B', 'Plain A', 'Art A', 'Art B'])
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove artwork' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove opening artwork' })[0])
     await waitFor(() => expect(names()).toEqual(['Plain A', 'Plain B', 'Art A', 'Art B']))
   })
 

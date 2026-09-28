@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AdminProductListing } from '../electron/product-contract'
 import CataloguePresentation from './CataloguePresentation'
 
-const categories = [{ id: 11, name: 'Vehicles', subtitle: 'Built for the thrill', description: null, imageUrl: null, imagePublicId: null }, { id: 4, name: 'City', subtitle: 'Every street tells a story', description: null, imageUrl: null, imagePublicId: null }, { id: 29, name: 'Juniors', subtitle: null, description: null, imageUrl: null, imagePublicId: null }]
+const categories = [{ id: 11, name: 'Vehicles', subtitle: 'Built for the thrill', description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }, { id: 4, name: 'City', subtitle: 'Every street tells a story', description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }, { id: 29, name: 'Juniors', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }]
 const jpegBytes = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1])
 const makeListing = (id: number, isFeatureProduct = false, catalogueArtworkUrl: string | null = null, colorfulLifeCategory: 'VEHICLES' | 'CITY' | 'JUNIORS' = 'VEHICLES', legoProductId = id + 100, condition: 'NEW' | 'USED_LIKE_NEW' = 'NEW', currentStock = 2): AdminProductListing => ({
   id, condition, active: true, usedLifecycle: condition === 'USED_LIKE_NEW' ? 'AVAILABLE' : null, currentStock, availableStock: currentStock,
@@ -21,7 +21,7 @@ describe('CataloguePresentation', () => {
       listProducts: vi.fn(), listAdminProductListings: vi.fn().mockResolvedValue([makeListing(1, true, 'https://cdn.example/current.jpg'), makeListing(2)]),
       searchLegoProducts: vi.fn().mockResolvedValue({ items: [], pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 } }), createUsedOffer: vi.fn(),
     }
-    window.adminCategories = { list: vi.fn().mockResolvedValue(categories), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn() }
+    window.adminCategories = { list: vi.fn().mockResolvedValue(categories), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn(), uploadThumbnailArtwork: vi.fn(), removeThumbnailArtwork: vi.fn() }
   })
 
   it('renders Feature and Standard state, category, and only catalogue artwork preview', async () => {
