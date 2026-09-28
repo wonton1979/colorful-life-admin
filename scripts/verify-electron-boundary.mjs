@@ -50,6 +50,14 @@ if (!builtMainSource.includes("webContents.on('context-menu'") || !builtEditMenu
 if (!builtPreloadSource.includes('admin-categories:create') || !builtMainSource.includes("handleIpc('admin-categories:create'")) {
   throw new Error('The compiled Electron boundary must expose category creation.')
 }
+const purchaseHistoryBridge = "list: (page, pageSize, search) => forwardIpcResult(ipcRenderer.invoke('admin-purchases:list', page, pageSize, search))"
+const purchaseHistoryHandler = "handleIpc('admin-purchases:list', async (_event, page: unknown, pageSize: unknown, search: unknown) => purchaseService.list(validatePage(page, 1), validatePageSize(pageSize, 6), validatePurchaseSearch(search)))"
+if (!preloadSource.includes(purchaseHistoryBridge) || !builtPreloadSource.includes("ipcRenderer.invoke('admin-purchases:list', page, pageSize, search)")) {
+  throw new Error('Purchase History must pass page, pageSize, and search through the typed preload bridge.')
+}
+if (!mainSource.includes(purchaseHistoryHandler) || !builtMainSource.includes("purchaseService.list(validatePage(page, 1), validatePageSize(pageSize, 6), validatePurchaseSearch(search))")) {
+  throw new Error('Purchase History IPC must validate and forward page, pageSize, and search.')
+}
 for (const channel of ['admin-purchases:manual-supplier-options', 'admin-purchases:create-manual', 'admin-purchases:review', 'admin-purchases:amend', 'admin-purchases:resolve', 'admin-purchases:set-inventory-disposition', 'admin-purchases:receive', 'admin-purchases:search-products', 'admin-purchases:create-listing', 'admin-purchases:import-pdf', 'admin-purchases:list', 'admin-purchases:get', 'admin-purchases:analytics-summary', 'admin-purchases:supplier-monthly-analytics']) {
   if (!builtPreloadSource.includes(channel)) throw new Error('Compiled preload missing ' + channel)
   if (!builtMainSource.includes(`handleIpc('${channel}'`)) {

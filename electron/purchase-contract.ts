@@ -46,7 +46,7 @@ export interface Purchase {
 
 export interface PurchasePage {
   purchases: Purchase[]
-  pagination: { page: number; limit: number; total: number; totalPages: number }
+  pagination: { page: number; pageSize: number; totalItems: number; totalPages: number; limit: number; total: number }
 }
 
 /** Monetary totals are backend-calculated decimal strings; the renderer only formats them. */
@@ -114,7 +114,7 @@ export interface AdminPurchasesApi {
   searchProducts(purchaseId: number, query: string): Promise<ReviewProduct[]>
   createListing(purchaseId: number, input: ReviewListingCreation): Promise<import('./product-contract.js').ProductListing>
   importPdf(file: { bytes: Uint8Array; filename: string; mimeType: 'application/pdf' }): Promise<PurchaseImportResult>
-  list(page?: number, limit?: number): Promise<PurchasePage>
+  list(page?: number, pageSize?: number, search?: string): Promise<PurchasePage>
   get(purchaseId: number): Promise<Purchase>
   purchaseAnalyticsSummary(): Promise<PurchaseAnalyticsSummary>
   supplierMonthlyAnalytics(supplierKey: string): Promise<SupplierMonthlyPurchaseAnalytics>
