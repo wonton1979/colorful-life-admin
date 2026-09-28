@@ -140,7 +140,8 @@ const validateSupplierKey = (supplierKey: unknown): string => {
   return supplierKey
 }
 const validatePage = (value: unknown, fallback: number): number => value === undefined ? fallback : typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : (() => { throw new PurchaseError('validation', 'Invalid purchase history page.') })()
-const validateLimit = (value: unknown, fallback: number): number => value === undefined ? fallback : typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 100 ? value : (() => { throw new PurchaseError('validation', 'Invalid purchase history limit.') })()
+const validatePageSize = (value: unknown, fallback: number): number => value === undefined ? fallback : typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 6 ? value : (() => { throw new PurchaseError('validation', 'Invalid purchase history page size.') })()
+const validatePurchaseSearch = (value: unknown): string | undefined => value === undefined ? undefined : typeof value === 'string' ? value : (() => { throw new PurchaseError('validation', 'Invalid purchase history search.') })()
 
 const validatePdf = (file: unknown): { bytes: Uint8Array; filename: string; mimeType: 'application/pdf' } => {
   if (typeof file !== 'object' || file === null) throw new PurchaseError('validation', 'Choose a PDF purchase document.')
@@ -152,7 +153,7 @@ const validatePdf = (file: unknown): { bytes: Uint8Array; filename: string; mime
 handleIpc('admin-purchases:import-pdf', async (_event, file: unknown) => purchaseService.importPdf(validatePdf(file)))
 handleIpc('admin-purchases:manual-supplier-options', () => purchaseService.getManualSupplierOptions())
 handleIpc('admin-purchases:create-manual', (_event, input: unknown) => purchaseService.createManual(input as ManualPurchaseInput))
-handleIpc('admin-purchases:list', async (_event, page: unknown, limit: unknown) => purchaseService.list(validatePage(page, 1), validateLimit(limit, 20)))
+handleIpc('admin-purchases:list', async (_event, page: unknown, pageSize: unknown, search: unknown) => purchaseService.list(validatePage(page, 1), validatePageSize(pageSize, 6), validatePurchaseSearch(search)))
 handleIpc('admin-purchases:get', async (_event, purchaseId: unknown) => purchaseService.get(validatePurchaseId(purchaseId)))
 handleIpc('admin-purchases:analytics-summary', () => purchaseService.purchaseAnalyticsSummary())
 handleIpc('admin-purchases:supplier-monthly-analytics', (_event, supplierKey: unknown) => purchaseService.supplierMonthlyAnalytics(validateSupplierKey(supplierKey)))

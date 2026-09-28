@@ -29,7 +29,7 @@ const server = createServer(async (req, res) => {
   else if (req.url.startsWith('/products?')) data = { items: [], pagination: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 } }
   else if (req.url === '/admin/categories') data = []
   else if (req.url === '/purchases/manual-supplier-options') data = { canonicalSuppliers: ['LEGO', 'Amazon', 'eBay', 'B&M', "Sainsbury's"], customSupplierOption: 'Others' }
-  else if (req.url.startsWith('/purchases?')) data = { purchases: [review.purchase], pagination: { page: 1, limit: 20, total: 1, totalPages: 1 } }
+  else if (req.url.startsWith('/purchases?')) data = { purchases: [review.purchase], pagination: { page: 1, pageSize: 6, totalItems: 1, totalPages: 1, limit: 6, total: 1 } }
   else if (req.url === '/purchases/1/review' && failReview) { res.statusCode = 500; data = { error: 'Unavailable' } }
   else if (req.url === '/purchases/1/review/products?q=model') data = [{ id: 1, title: 'Display model', setNumber: '75446' }]
   else if (req.url.endsWith('/listing')) { review.revision = 'b'.repeat(64); data = review }

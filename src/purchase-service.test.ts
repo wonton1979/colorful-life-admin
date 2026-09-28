@@ -64,12 +64,34 @@ describe('PurchaseService', () => {
 
   it('parses history and details using the backend contracts', async () => {
     const authenticatedFetch = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ purchases: [historyPurchase], pagination: { page: 1, limit: 20, total: 1, totalPages: 1 } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ purchases: [historyPurchase], pagination: { page: 1, pageSize: 6, totalItems: 1, totalPages: 1, limit: 6, total: 1 } }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(purchase), { status: 200 }))
     const service = new PurchaseService({ authenticatedFetch } as unknown as AuthService)
     expect((await service.list()).purchases[0].purchaseDocuments[0].purchaseItems).toBeUndefined()
     expect((await service.get(3)).sourceOrderReference).toBe('ORDER-1')
-    expect(authenticatedFetch.mock.calls.map((call) => call[0])).toEqual(['/purchases?page=1&limit=20', '/purchases/3'])
+    expect(authenticatedFetch.mock.calls.map((call) => call[0])).toEqual(['/purchases?page=1&pageSize=6', '/purchases/3'])
+  })
+
+  it('passes page, pageSize and search through the authenticated history service using the backend contract', async () => {
+    const page = { purchases: [], pagination: { page: 2, pageSize: 6, totalItems: 14, totalPages: 3, limit: 6, total: 14 } }
+    const authenticatedFetch = vi.fn().mockImplementation(() => new Response(JSON.stringify(page), { status: 200 }))
+    const service = new PurchaseService({ authenticatedFetch } as unknown as AuthService)
+
+    await expect(service.list(2, 6, '171-')).resolves.toMatchObject({ pagination: page.pagination })
+    expect(authenticatedFetch.mock.calls.at(-1)?.[0]).toBe('/purchases?page=2&pageSize=6&search=171-')
+    await service.list(1, 6, '2026-09-27')
+    expect(authenticatedFetch.mock.calls.at(-1)?.[0]).toBe('/purchases?page=1&pageSize=6&search=2026-09-27')
+  })
+
+  it('rejects a backend history page containing more purchases than its pageSize', async () => {
+    const tooMany = Array.from({ length: 7 }, (_, id) => ({ ...historyPurchase, id: id + 1 }))
+    const authenticatedFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      purchases: tooMany,
+      pagination: { page: 1, pageSize: 6, totalItems: 7, totalPages: 2, limit: 6, total: 7 },
+    }), { status: 200 }))
+    const service = new PurchaseService({ authenticatedFetch } as unknown as AuthService)
+
+    await expect(service.list(1, 6)).rejects.toMatchObject({ code: 'malformed-response' } satisfies Partial<PurchaseError>)
   })
 
   it('maps duplicate and server responses to safe errors', async () => {

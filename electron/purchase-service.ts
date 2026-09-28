@@ -112,8 +112,16 @@ const parsePurchase = (value: unknown, requireItems = false): Purchase => {
 }
 
 const parsePage = (value: unknown): PurchasePage => {
-  if (!isRecord(value) || !Array.isArray(value.purchases) || !isRecord(value.pagination) || !isNumber(value.pagination.page) || !isNumber(value.pagination.limit) || !isNumber(value.pagination.total) || !isNumber(value.pagination.totalPages)) throw new PurchaseError('malformed-response', 'The server returned an invalid purchase history response.')
-  return { purchases: value.purchases.map((purchase) => parsePurchase(purchase)), pagination: { page: value.pagination.page, limit: value.pagination.limit, total: value.pagination.total, totalPages: value.pagination.totalPages } }
+  if (!isRecord(value) || !Array.isArray(value.purchases) || !isRecord(value.pagination)) throw new PurchaseError('malformed-response', 'The server returned an invalid purchase history response.')
+  const { page, pageSize, totalItems, totalPages, limit, total } = value.pagination
+  if (![page, pageSize, totalItems, totalPages, limit, total].every(isNumber) ||
+    ![page, pageSize, totalItems, totalPages, limit, total].every(Number.isSafeInteger) ||
+    (page as number) < 1 || (pageSize as number) < 1 || (pageSize as number) > 6 || (totalItems as number) < 0 || (totalPages as number) < 0 ||
+    (page as number) > Math.max(1, totalPages as number) ||
+    (limit as number) < 1 || (total as number) < 0 || value.purchases.length > (pageSize as number)) {
+    throw new PurchaseError('malformed-response', 'The server returned an invalid purchase history response.')
+  }
+  return { purchases: value.purchases.map((purchase) => parsePurchase(purchase)), pagination: { page: page as number, pageSize: pageSize as number, totalItems: totalItems as number, totalPages: totalPages as number, limit: limit as number, total: total as number } }
 }
 
 const poundsToPence = (value: unknown, field: string): number => {
@@ -234,8 +242,10 @@ export class PurchaseService implements AdminPurchasesApi {
     return { message: value.message, importHash: value.importHash }
   }
 
-  async list(page = 1, limit = 20): Promise<PurchasePage> {
-    const response = await this.auth.authenticatedFetch(`/purchases?page=${page}&limit=${limit}`)
+  async list(page = 1, pageSize = 6, search?: string): Promise<PurchasePage> {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+    if (search) params.set('search', search)
+    const response = await this.auth.authenticatedFetch(`/purchases?${params.toString()}`)
     if (!response.ok) throw await responseError(response)
     return parsePage(await response.json())
   }
