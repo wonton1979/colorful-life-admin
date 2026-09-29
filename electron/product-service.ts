@@ -1,7 +1,7 @@
 import type { AuthService } from './auth-service.js'
 import { readBackendError } from './backend-error.js'
 import { colorfulLifeCategoryOptions } from './product-contract.js'
-import type { AdminLegoProduct, AdminLegoProductDetails, AdminLegoProductPage, AdminProductListing, BackendCategory, CatalogueArtwork, ColorfulLifeCategory, CreateProductRequest, ImageUploadPayload, ProductCataloguePage, ProductImage, ProductListing, ProductMetadataUpdate, UsedOfferCreateInput, UsedOfferCreated, UsedOfferStatus } from './product-contract.js'
+import type { AdminLegoProduct, AdminLegoProductDetails, AdminLegoProductPage, AdminProductListing, BackendCategory, CatalogueArtwork, ColorfulLifeCategory, CreateProductRequest, ImageUploadPayload, ProductAvailabilitySummary, ProductCataloguePage, ProductImage, ProductListing, ProductMetadataUpdate, UsedOfferCreateInput, UsedOfferCreated, UsedOfferStatus } from './product-contract.js'
 
 export type ProductErrorCode = 'validation' | 'conflict' | 'not-found' | 'limit' | 'forbidden' | 'server' | 'malformed-response'
 
@@ -22,7 +22,15 @@ export class ProductError extends Error {
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 const isString = (value: unknown): value is string => typeof value === 'string'
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
+const isNonNegativeInteger = (value: unknown): value is number => isNumber(value) && Number.isInteger(value) && value >= 0
 const isNullableString = (value: unknown): value is string | null => isString(value) || value === null
+
+const parseProductAvailabilitySummary = (value: unknown): ProductAvailabilitySummary => {
+  if (!isRecord(value) || !isNonNegativeInteger(value.totalProducts) || !isNonNegativeInteger(value.totalInventory) || !isNonNegativeInteger(value.activeProducts) || !isNonNegativeInteger(value.inactiveProducts)) {
+    throw new ProductError('malformed-response', 'The server returned invalid product availability counts.')
+  }
+  return { totalProducts: value.totalProducts, totalInventory: value.totalInventory, activeProducts: value.activeProducts, inactiveProducts: value.inactiveProducts }
+}
 
 const parseCategory = (value: unknown): BackendCategory | null => {
   if (value === null) return null
@@ -266,6 +274,12 @@ export class ProductService {
       throw new ProductError('malformed-response', 'The server returned an incomplete Admin product listing collection.')
     }
     return listings
+  }
+
+  async getProductAvailability(): Promise<ProductAvailabilitySummary> {
+    const response = await this.authService.authenticatedFetch('/admin/products/product-availability')
+    if (!response.ok) throw await errorForResponse(response, 'list')
+    return parseProductAvailabilitySummary(await response.json())
   }
 
   async updateProductMetadata(productId: number, update: ProductMetadataUpdate): Promise<AdminLegoProductDetails> {

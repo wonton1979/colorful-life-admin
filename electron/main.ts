@@ -62,6 +62,7 @@ handleIpc('admin-products:create', async (_event, request: unknown) => {
 
 handleIpc('admin-products:list', () => productService.listProducts())
 handleIpc('admin-products:list-admin-product-listings', () => productService.listAdminProductListings())
+handleIpc('admin-products:product-availability', () => productService.getProductAvailability())
 handleIpc('admin-products:update-metadata', async (_event, productId: unknown, update: unknown) => {
   if (!isProductMetadataUpdate(update)) throw new ProductError('validation', 'Enter valid product details to update.')
   return productService.updateProductMetadata(validateProductId(productId), update)
@@ -120,6 +121,7 @@ const validateCategoryId = (categoryId: unknown): number => {
 }
 
 handleIpc('admin-categories:list', () => categoryService.list())
+handleIpc('admin-categories:product-availability', async (_event, categoryId: unknown) => categoryService.getProductAvailability(validateCategoryId(categoryId)))
 handleIpc('admin-categories:create', (_event, input: unknown) => categoryService.create(validateCategoryCreate(input)))
 handleIpc('admin-categories:update', async (_event, categoryId: unknown, update: unknown) => {
   if (typeof update !== 'object' || update === null || typeof (update as Record<string, unknown>).name !== 'string') throw new CategoryError('validation', 'Invalid category details.')

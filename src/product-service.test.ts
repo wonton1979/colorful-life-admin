@@ -26,6 +26,25 @@ const ipcCloneWithSurroundingBytes = (bytes: Uint8Array, offset: number) => {
 }
 
 describe('ProductService', () => {
+  it('loads backend-provided catalogue-wide product availability and accepts zero values', async () => {
+    const authenticatedFetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ totalProducts: 17, totalInventory: 143, activeProducts: 12, inactiveProducts: 5 })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ totalProducts: 0, totalInventory: 0, activeProducts: 0, inactiveProducts: 0 })))
+    const service = new ProductService({ authenticatedFetch } as unknown as AuthService)
+
+    await expect(service.getProductAvailability()).resolves.toEqual({ totalProducts: 17, totalInventory: 143, activeProducts: 12, inactiveProducts: 5 })
+    await expect(service.getProductAvailability()).resolves.toEqual({ totalProducts: 0, totalInventory: 0, activeProducts: 0, inactiveProducts: 0 })
+    expect(authenticatedFetch).toHaveBeenNthCalledWith(1, '/admin/products/product-availability')
+    expect(authenticatedFetch).toHaveBeenNthCalledWith(2, '/admin/products/product-availability')
+  })
+
+  it('rejects malformed catalogue-wide availability summaries', async () => {
+    const authenticatedFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ totalProducts: 1, totalInventory: -1, activeProducts: 1, inactiveProducts: 0 })))
+    const service = new ProductService({ authenticatedFetch } as unknown as AuthService)
+
+    await expect(service.getProductAvailability()).rejects.toMatchObject({ code: 'malformed-response' })
+  })
+
   it('updates shared LegoProduct metadata by product ID and parses category and ordered images', async () => {
     const authenticatedFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(updatedLegoProductBody)))
     const service = new ProductService({ authenticatedFetch } as unknown as AuthService)

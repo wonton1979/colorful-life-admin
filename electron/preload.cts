@@ -32,6 +32,7 @@ const adminProducts: AdminProductsApi = {
   createProduct: (request) => forwardIpcResult(ipcRenderer.invoke('admin-products:create', request)),
   listProducts: () => forwardIpcResult(ipcRenderer.invoke('admin-products:list')),
   listAdminProductListings: () => forwardIpcResult(ipcRenderer.invoke('admin-products:list-admin-product-listings')),
+  getProductAvailability: () => forwardIpcResult(ipcRenderer.invoke('admin-products:product-availability')),
   updateProductMetadata: (productId, update) => forwardIpcResult(ipcRenderer.invoke('admin-products:update-metadata', productId, update)),
   listProductImages: (productId) => forwardIpcResult(ipcRenderer.invoke('admin-products:list-product-images', productId)),
   uploadProductImage: (productId, image) => forwardIpcResult(ipcRenderer.invoke('admin-products:upload-image', productId, image)),
@@ -49,6 +50,7 @@ contextBridge.exposeInMainWorld('adminProducts', adminProducts)
 
 const adminCategories: AdminCategoriesApi = {
   list: () => forwardIpcResult(ipcRenderer.invoke('admin-categories:list')),
+  getProductAvailability: (categoryId) => forwardIpcResult(ipcRenderer.invoke('admin-categories:product-availability', categoryId)),
   create: (input) => forwardIpcResult(ipcRenderer.invoke('admin-categories:create', input)),
   update: (categoryId, update) => forwardIpcResult(ipcRenderer.invoke('admin-categories:update', categoryId, update)),
   uploadArtwork: (categoryId, image) => forwardIpcResult(ipcRenderer.invoke('admin-categories:upload-artwork', categoryId, image)),

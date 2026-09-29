@@ -10,6 +10,7 @@ describe('Categories', () => {
   beforeEach(() => {
     window.adminCategories = {
       list: vi.fn().mockResolvedValue([category()]),
+      getProductAvailability: vi.fn().mockResolvedValue({ totalProducts: 0, totalInventory: 0, activeProducts: 0, inactiveProducts: 0 }),
       create: vi.fn().mockResolvedValue(category({ id: 2, name: 'Technic', subtitle: null, description: null })),
       update: vi.fn().mockResolvedValue(category({ name: 'Updated City', subtitle: 'Updated subtitle' })),
       uploadArtwork: vi.fn().mockResolvedValue(category({ imageUrl: 'https://cdn.example/city.jpg', imagePublicId: 'category-artwork/1-a' })),

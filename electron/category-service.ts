@@ -1,5 +1,6 @@
 import type { AuthService } from './auth-service.js'
 import type { AdminCategory, AdminCategoriesApi, CategoryCreate, CategoryTextUpdate } from './category-contract.js'
+import type { ProductAvailabilitySummary } from './product-contract.js'
 import { readBackendError } from './backend-error.js'
 
 export type CategoryErrorCode = 'validation' | 'conflict' | 'not-found' | 'forbidden' | 'session-invalid' | 'server' | 'malformed-response'
@@ -14,10 +15,18 @@ export class CategoryError extends Error {
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 const isString = (value: unknown): value is string => typeof value === 'string'
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
+const isNonNegativeInteger = (value: unknown): value is number => isNumber(value) && Number.isInteger(value) && value >= 0
 
 const parseCategory = (value: unknown): AdminCategory => {
   if (!isRecord(value) || !isNumber(value.id) || !isString(value.name) || (!isString(value.subtitle) && value.subtitle !== null) || (!isString(value.description) && value.description !== null) || (!isString(value.imageUrl) && value.imageUrl !== null) || (!isString(value.imagePublicId) && value.imagePublicId !== null) || (!isString(value.thumbnailUrl) && value.thumbnailUrl !== null) || (!isString(value.thumbnailPublicId) && value.thumbnailPublicId !== null)) throw new CategoryError('malformed-response', 'The server returned an invalid category response.')
   return { id: value.id, name: value.name, subtitle: value.subtitle, description: value.description, imageUrl: value.imageUrl, imagePublicId: value.imagePublicId, thumbnailUrl: value.thumbnailUrl, thumbnailPublicId: value.thumbnailPublicId }
+}
+
+const parseCategoryProductAvailability = (value: unknown): ProductAvailabilitySummary => {
+  if (!isRecord(value) || !isNonNegativeInteger(value.totalProducts) || !isNonNegativeInteger(value.totalInventory) || !isNonNegativeInteger(value.activeProducts) || !isNonNegativeInteger(value.inactiveProducts)) {
+    throw new CategoryError('malformed-response', 'The server returned invalid category availability counts.')
+  }
+  return { totalProducts: value.totalProducts, totalInventory: value.totalInventory, activeProducts: value.activeProducts, inactiveProducts: value.inactiveProducts }
 }
 
 export class CategoryService implements AdminCategoriesApi {
@@ -25,6 +34,12 @@ export class CategoryService implements AdminCategoriesApi {
   constructor(auth: AuthService) { this.auth = auth }
 
   async list() { const response = await this.auth.authenticatedFetch('/admin/categories'); if (!response.ok) throw await this.responseError(response, 'list'); const body: unknown = await response.json(); if (!Array.isArray(body)) throw new CategoryError('malformed-response', 'The server returned invalid categories.'); return body.map(parseCategory) }
+
+  async getProductAvailability(categoryId: number) {
+    const response = await this.auth.authenticatedFetch(`/admin/categories/${categoryId}/product-availability`)
+    if (!response.ok) throw await this.responseError(response, 'availability')
+    return parseCategoryProductAvailability(await response.json())
+  }
 
   async create(input: CategoryCreate) {
     return this.sendJson('/admin/categories', validateCategoryCreate(input), 'POST')
@@ -61,7 +76,7 @@ export class CategoryService implements AdminCategoriesApi {
 
   private async parseMutation(response: Response) { if (!response.ok) throw await this.responseError(response, 'mutation'); return parseCategory(await response.json()) }
 
-  private async responseError(response: Response, operation: 'list' | 'mutation') {
+  private async responseError(response: Response, operation: 'list' | 'mutation' | 'availability') {
     const details = await readBackendError(response, response.status === 409 ? 'A category with this name already exists.' : 'The category action could not be completed.')
     const { message, code } = details
     if (response.status === 400) return new CategoryError('validation', message, response.status, code)
