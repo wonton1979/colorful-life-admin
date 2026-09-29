@@ -54,6 +54,9 @@ handleIpc('admin-auth:login', async (_event, credentials: unknown) => {
 handleIpc('admin-auth:restore', () => authService.restore())
 handleIpc('admin-auth:renew', () => authService.renewSession())
 handleIpc('admin-auth:logout', () => authService.logout())
+handleIpc('admin-window:maximize', (event) => {
+  if (mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents) mainWindow.maximize()
+})
 
 handleIpc('admin-products:create', async (_event, request: unknown) => {
   if (!isCreateProductRequest(request)) throw new ProductError('validation', 'Invalid product details.')

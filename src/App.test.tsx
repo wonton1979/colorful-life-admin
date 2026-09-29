@@ -9,6 +9,7 @@ describe('App authentication flow', () => {
   afterEach(() => { cleanup(); vi.useRealTimers() })
 
   beforeEach(() => {
+    window.adminWindow = { maximize: vi.fn().mockResolvedValue(undefined) }
     window.adminAuth = {
       restore: vi.fn().mockResolvedValue(null),
       login: vi.fn().mockResolvedValue(adminSession),
@@ -40,10 +41,12 @@ describe('App authentication flow', () => {
   it('shows the unauthenticated login screen and submits credentials', async () => {
     render(<App />)
     expect(await screen.findByRole('heading', { name: /sign in to continue/i })).toBeTruthy()
+    expect(window.adminWindow.maximize).not.toHaveBeenCalled()
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: admin.email } })
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } })
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Admin workspace' })).toBeInTheDocument())
+    await waitFor(() => expect(window.adminWindow.maximize).toHaveBeenCalledOnce())
     expect(screen.getByText(admin.email)).toBeInTheDocument()
     expect(window.adminAuth.login).toHaveBeenCalledWith({ email: admin.email, password: 'secret' })
   })
@@ -65,7 +68,9 @@ describe('App authentication flow', () => {
     const pendingButton = await screen.findByRole('button', { name: /signing in/i })
     expect(pendingButton).toBeDisabled()
     expect(pendingButton).toHaveAttribute('aria-busy', 'true')
-    resolveLogin(adminSession)
+    expect(window.adminWindow.maximize).not.toHaveBeenCalled()
+    await act(async () => { resolveLogin(adminSession) })
+    await waitFor(() => expect(window.adminWindow.maximize).toHaveBeenCalledOnce())
   })
 
   it('toggles password visibility without submitting or changing its value', async () => {
@@ -96,17 +101,20 @@ describe('App authentication flow', () => {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'wrong' } })
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('email or password is incorrect')
+    expect(window.adminWindow.maximize).not.toHaveBeenCalled()
   })
 
   it('renders the restored shell and logs out', async () => {
     window.adminAuth.restore = vi.fn().mockResolvedValue(adminSession)
     render(<App />)
     expect(await screen.findByRole('heading', { name: 'Admin workspace' })).toBeInTheDocument()
+    await waitFor(() => expect(window.adminWindow.maximize).toHaveBeenCalledOnce())
     expect(screen.getByText(admin.email)).toBeInTheDocument()
     expect(screen.queryByText('Welcome back')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: /sign in to continue/i })).toBeTruthy())
     expect(window.adminAuth.logout).toHaveBeenCalled()
+    expect(window.adminWindow.maximize).toHaveBeenCalledOnce()
   })
 
   it('opens the shared product editing workflow from the Admin navigation', async () => {

@@ -122,6 +122,12 @@ function App() {
     return () => { active = false }
   }, [applySession])
 
+  useEffect(() => {
+    if (viewState === 'signed-in' && user) {
+      void window.adminWindow?.maximize().catch(() => undefined)
+    }
+  }, [viewState, user])
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')

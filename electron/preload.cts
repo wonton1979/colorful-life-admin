@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 import type { AdminAuthApi, AdminSessionEndedNotice } from './auth-contract.js'
+import type { AdminWindowApi } from './window-contract.js'
 import type { AdminProductsApi } from './product-contract.js'
 import type { AdminCategoriesApi } from './category-contract.js'
 import type { AdminPurchasesApi } from './purchase-contract.js'
@@ -27,6 +28,12 @@ const adminAuth: AdminAuthApi = {
 }
 
 contextBridge.exposeInMainWorld('adminAuth', adminAuth)
+
+const adminWindow: AdminWindowApi = {
+  maximize: () => forwardIpcResult(ipcRenderer.invoke('admin-window:maximize')),
+}
+
+contextBridge.exposeInMainWorld('adminWindow', adminWindow)
 
 const adminProducts: AdminProductsApi = {
   createProduct: (request) => forwardIpcResult(ipcRenderer.invoke('admin-products:create', request)),

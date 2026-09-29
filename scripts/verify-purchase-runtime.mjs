@@ -63,6 +63,7 @@ const timeout = setTimeout(() => { console.error('Electron runtime check timed o
 try {
   await import(pathToFileURL(join(root, 'dist-electron/main.js')).href)
   await ready
+  assert.equal(window.isMaximized(), false, 'The unauthenticated startup window must remain compact.')
   const js = async expression => {
     try { return await window.webContents.executeJavaScript(expression) }
     catch (error) { console.error('Failed runtime expression:', expression); throw error }
@@ -90,6 +91,10 @@ try {
   }`)
   await js("document.querySelector('form').requestSubmit()")
   await until("document.body.textContent.includes('Admin workspace')")
+  for (let n = 0; n < 100 && !window.isMaximized(); n++) await new Promise(resolve => setTimeout(resolve, 50))
+  assert.equal(window.isMaximized(), true, 'Authenticated workspace must maximize its native BrowserWindow.')
+  assert.equal(window.isFullScreen(), false, 'Authenticated workspace must use normal window maximization, not fullscreen.')
+  window.unmaximize()
   await click('Purchases')
   await until("document.body.textContent.includes('ORDER-1')")
   await click('View details')
@@ -158,7 +163,7 @@ try {
   assert(requests.some(r => r.path === '/admin/categories/9/product-availability' && r.auth === 'Bearer disposable-runtime-token'))
   assert(requests.some(r => r.path === '/admin/products/product-availability' && r.auth === 'Bearer disposable-runtime-token'))
   assert(requests.some(r => r.path.endsWith('/receive')))
-  console.log('Verified compiled Electron review, amendment, resolution, receiving, supplier options, refresh/failure/back, existing bridges, and responsive Add Purchase layout.')
+  console.log('Verified authenticated BrowserWindow maximize, compiled Electron review workflows, existing bridges, and responsive Add Purchase layout.')
   console.log('Runtime screenshots: ' + folder)
   clearTimeout(timeout)
   server.close()

@@ -2,6 +2,7 @@ import type { AdminProductsApi } from '../electron/product-contract.js'
 import type { AdminCategoriesApi } from '../electron/category-contract.js'
 import type { AdminPurchasesApi } from '../electron/purchase-contract.js'
 import type { AdminAuthApi } from '../electron/auth-contract.js'
+import type { AdminWindowApi } from '../electron/window-contract.js'
 
 declare global {
   interface AdminUser {
@@ -14,6 +15,7 @@ declare global {
 
   interface Window {
     adminAuth: AdminAuthApi
+    adminWindow: AdminWindowApi
     adminProducts: AdminProductsApi
     adminCategories: AdminCategoriesApi
     adminPurchases: AdminPurchasesApi
