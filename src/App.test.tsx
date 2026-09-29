@@ -21,6 +21,7 @@ describe('App authentication flow', () => {
       createProduct: vi.fn(),
       listProducts: vi.fn().mockResolvedValue([]),
       listAdminProductListings: vi.fn().mockResolvedValue([]),
+      getProductAvailability: vi.fn().mockResolvedValue({ totalProducts: 0, totalInventory: 0, activeProducts: 0, inactiveProducts: 0 }),
       updateProductMetadata: vi.fn(),
       listProductImages: vi.fn().mockResolvedValue([]),
       uploadProductImage: vi.fn(),
@@ -33,7 +34,7 @@ describe('App authentication flow', () => {
       searchLegoProducts: vi.fn().mockResolvedValue({ items: [], pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 } }),
       createUsedOffer: vi.fn(),
     }
-    window.adminCategories = { list: vi.fn().mockResolvedValue([{ id: 4, name: 'City', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }]), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn(), uploadThumbnailArtwork: vi.fn(), removeThumbnailArtwork: vi.fn() }
+    window.adminCategories = { list: vi.fn().mockResolvedValue([{ id: 4, name: 'City', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }]), getProductAvailability: vi.fn().mockResolvedValue({ totalProducts: 0, totalInventory: 0, activeProducts: 0, inactiveProducts: 0 }), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn(), uploadThumbnailArtwork: vi.fn(), removeThumbnailArtwork: vi.fn() }
   })
 
   it('shows the unauthenticated login screen and submits credentials', async () => {

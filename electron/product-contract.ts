@@ -93,6 +93,13 @@ export interface ProductCataloguePage {
   }
 }
 
+export interface ProductAvailabilitySummary {
+  totalProducts: number
+  totalInventory: number
+  activeProducts: number
+  inactiveProducts: number
+}
+
 /** Admin listing rows with shared presentation owned by the nested LegoProduct. */
 export interface AdminProductListing {
   id: number
@@ -186,6 +193,7 @@ export interface AdminProductsApi {
   createProduct(request: CreateProductRequest): Promise<ProductListing>
   listProducts(): Promise<ProductListing[]>
   listAdminProductListings(): Promise<AdminProductListing[]>
+  getProductAvailability(): Promise<ProductAvailabilitySummary>
   updateProductMetadata(productId: number, update: ProductMetadataUpdate): Promise<AdminLegoProductDetails>
   listProductImages(productId: number): Promise<ProductImage[]>
   uploadProductImage(productId: number, image: ImageUploadPayload): Promise<ProductImage>

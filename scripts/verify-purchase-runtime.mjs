@@ -27,7 +27,9 @@ const server = createServer(async (req, res) => {
   }
   else if (req.url === '/profile') data = { id: 1, email: 'runtime@test.invalid', role: 'ADMIN', createdAt: '2026-09-21', updatedAt: '2026-09-21' }
   else if (req.url.startsWith('/products?')) data = { items: [], pagination: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 } }
+  else if (req.url === '/admin/products/product-availability') data = { totalProducts: 17, totalInventory: 143, activeProducts: 12, inactiveProducts: 5 }
   else if (req.url === '/admin/categories') data = []
+  else if (req.url === '/admin/categories/9/product-availability') data = { totalProducts: 3, totalInventory: 9, activeProducts: 2, inactiveProducts: 1 }
   else if (req.url === '/purchases/manual-supplier-options') data = { canonicalSuppliers: ['LEGO', 'Amazon', 'eBay', 'B&M', "Sainsbury's"], customSupplierOption: 'Others' }
   else if (req.url.startsWith('/purchases?')) data = { purchases: [review.purchase], pagination: { page: 1, pageSize: 6, totalItems: 1, totalPages: 1, limit: 6, total: 1 } }
   else if (req.url === '/purchases/1/review' && failReview) { res.statusCode = 500; data = { error: 'Unavailable' } }
@@ -128,6 +130,8 @@ try {
   })()`)
   assert(spacing >= 7)
   await js("window.adminCategories.list()")
+  assert.deepEqual(await js("window.adminCategories.getProductAvailability(9)"), { totalProducts: 3, totalInventory: 9, activeProducts: 2, inactiveProducts: 1 })
+  assert.deepEqual(await js("window.adminProducts.getProductAvailability()"), { totalProducts: 17, totalInventory: 143, activeProducts: 12, inactiveProducts: 5 })
   await js("window.adminProducts.listProducts()")
   await js("window.adminPurchases.searchProducts(1,'model')")
   assert.deepEqual(await js('window.adminPurchases.getManualSupplierOptions()'), {
@@ -151,6 +155,8 @@ try {
   assert.equal(await js("!!document.querySelector('#manual-purchase-custom-supplier')"), false)
   assert(requests.filter(r => r.path.startsWith('/purchases/1/review')).every(r => r.auth === 'Bearer disposable-runtime-token'))
   assert(requests.some(r => r.path === '/purchases/manual-supplier-options' && r.auth === 'Bearer disposable-runtime-token'))
+  assert(requests.some(r => r.path === '/admin/categories/9/product-availability' && r.auth === 'Bearer disposable-runtime-token'))
+  assert(requests.some(r => r.path === '/admin/products/product-availability' && r.auth === 'Bearer disposable-runtime-token'))
   assert(requests.some(r => r.path.endsWith('/receive')))
   console.log('Verified compiled Electron review, amendment, resolution, receiving, supplier options, refresh/failure/back, existing bridges, and responsive Add Purchase layout.')
   console.log('Runtime screenshots: ' + folder)

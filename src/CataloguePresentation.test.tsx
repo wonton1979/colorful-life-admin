@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AdminProductListing } from '../electron/product-contract'
 import CataloguePresentation from './CataloguePresentation'
 
-const categories = [{ id: 11, name: 'Vehicles', subtitle: 'Built for the thrill', description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }, { id: 4, name: 'City', subtitle: 'Every street tells a story', description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }, { id: 29, name: 'Juniors', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }]
+const categories = [{ id: 11, name: 'Vehicles', subtitle: 'Built for the thrill', description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }, { id: 4, name: 'City', subtitle: 'Every street tells a story', description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }, { id: 29, name: 'Juniors', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }, { id: 43, name: 'Friends', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }, { id: 57, name: 'BrickHeadz', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null }]
 const jpegBytes = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1])
 const makeListing = (id: number, isFeatureProduct = false, catalogueArtworkUrl: string | null = null, colorfulLifeCategory: 'VEHICLES' | 'CITY' | 'JUNIORS' = 'VEHICLES', legoProductId = id + 100, condition: 'NEW' | 'USED_LIKE_NEW' = 'NEW', currentStock = 2): AdminProductListing => ({
   id, condition, active: true, usedLifecycle: condition === 'USED_LIKE_NEW' ? 'AVAILABLE' : null, currentStock, availableStock: currentStock,
@@ -19,9 +19,10 @@ describe('CataloguePresentation', () => {
       updateProductMetadata: vi.fn(),
       uploadCatalogueArtwork: vi.fn().mockResolvedValue({ url: 'https://cdn.example/new-artwork.jpg', publicId: 'stored-1' }), removeCatalogueArtwork: vi.fn().mockResolvedValue(undefined),
       listProducts: vi.fn(), listAdminProductListings: vi.fn().mockResolvedValue([makeListing(1, true, 'https://cdn.example/current.jpg'), makeListing(2)]),
+      getProductAvailability: vi.fn().mockResolvedValue({ totalProducts: 2, totalInventory: 6, activeProducts: 1, inactiveProducts: 1 }),
       searchLegoProducts: vi.fn().mockResolvedValue({ items: [], pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 } }), createUsedOffer: vi.fn(),
     }
-    window.adminCategories = { list: vi.fn().mockResolvedValue(categories), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn(), uploadThumbnailArtwork: vi.fn(), removeThumbnailArtwork: vi.fn() }
+    window.adminCategories = { list: vi.fn().mockResolvedValue(categories), getProductAvailability: vi.fn().mockResolvedValue({ totalProducts: 2, totalInventory: 6, activeProducts: 1, inactiveProducts: 1 }), create: vi.fn(), update: vi.fn(), uploadArtwork: vi.fn(), removeArtwork: vi.fn(), uploadThumbnailArtwork: vi.fn(), removeThumbnailArtwork: vi.fn() }
   })
 
   it('renders Feature and Standard state, category, and only catalogue artwork preview', async () => {
@@ -311,5 +312,202 @@ describe('CataloguePresentation', () => {
     render(<CataloguePresentation />)
     expect(await screen.findByRole('alert')).toHaveTextContent('The catalogue service is unavailable.')
     expect(screen.queryByText('No listings found for this category.')).not.toBeInTheDocument()
+  })
+
+  it('displays backend category totals including zero Active and zero Inactive without changing Feature state', async () => {
+    const getAvailability = window.adminCategories.getProductAvailability as ReturnType<typeof vi.fn>
+    getAvailability.mockImplementation(async (categoryId: number) => categoryId === 11
+      ? { totalProducts: 5, totalInventory: 11, activeProducts: 0, inactiveProducts: 5 }
+      : { totalProducts: 3, totalInventory: 8, activeProducts: 3, inactiveProducts: 0 })
+    render(<CataloguePresentation />)
+    await screen.findByText('Vehicle 2')
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Presentation category' }), { target: { value: '11' } })
+    expect(await screen.findByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'Vehicles · 5 Products · 11 Inventory · 0 Active · 5 Inactive')).toBeInTheDocument()
+    expect(getAvailability).toHaveBeenCalledWith(11)
+    expect(screen.getByText('Feature')).toBeInTheDocument()
+    expect(screen.getByText('Standard')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Presentation category' }), { target: { value: '4' } })
+    expect(await screen.findByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'City · 3 Products · 8 Inventory · 3 Active · 0 Inactive')).toBeInTheDocument()
+    expect(getAvailability).toHaveBeenLastCalledWith(4)
+  })
+
+  it('hides old counts during category switching and ignores stale availability responses', async () => {
+    const getAvailability = window.adminCategories.getProductAvailability as ReturnType<typeof vi.fn>
+    const pending: Partial<Record<number, (value: { totalProducts: number; totalInventory: number; activeProducts: number; inactiveProducts: number }) => void>> = {}
+    getAvailability.mockImplementation((categoryId: number) => new Promise((resolve) => { pending[categoryId] = resolve }))
+    render(<CataloguePresentation />)
+    await screen.findByText('Vehicle 2')
+
+    const filter = screen.getByRole('combobox', { name: 'Presentation category' })
+    fireEvent.change(filter, { target: { value: '43' } })
+    expect(getAvailability).toHaveBeenCalledWith(43)
+    fireEvent.change(filter, { target: { value: '57' } })
+    expect(getAvailability).toHaveBeenCalledWith(57)
+    expect(document.querySelector('.category-availability-summary')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading category availability')
+
+    pending[57]?.({ totalProducts: 9, totalInventory: 22, activeProducts: 7, inactiveProducts: 2 })
+    expect(await screen.findByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'BrickHeadz · 9 Products · 22 Inventory · 7 Active · 2 Inactive')).toBeInTheDocument()
+    pending[43]?.({ totalProducts: 15, totalInventory: 39, activeProducts: 12, inactiveProducts: 3 })
+    await waitFor(() => expect(screen.getByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'BrickHeadz · 9 Products · 22 Inventory · 7 Active · 2 Inactive')).toBeInTheDocument())
+    expect(document.querySelector('.category-availability-summary')).not.toHaveTextContent('Friends')
+  })
+
+  it('keeps specific-category counts unchanged through pagination and switches to the global summary for All Categories', async () => {
+    const getAvailability = window.adminCategories.getProductAvailability as ReturnType<typeof vi.fn>
+    getAvailability.mockResolvedValue({ totalProducts: 12, totalInventory: 66, activeProducts: 9, inactiveProducts: 3 })
+    const getGlobalAvailability = window.adminProducts.getProductAvailability as ReturnType<typeof vi.fn>
+    getGlobalAvailability.mockResolvedValue({ totalProducts: 2, totalInventory: 13, activeProducts: 1, inactiveProducts: 1 })
+    window.adminProducts.listAdminProductListings = vi.fn().mockResolvedValue(Array.from({ length: 9 }, (_, index) => makeListing(index + 1)))
+    render(<CataloguePresentation />)
+    await screen.findByText('Vehicle 9')
+
+    const filter = screen.getByRole('combobox', { name: 'Presentation category' })
+    fireEvent.change(filter, { target: { value: '11' } })
+    expect(await screen.findByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'Vehicles · 12 Products · 66 Inventory · 9 Active · 3 Inactive')).toBeInTheDocument()
+    expect(getAvailability).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText('Page 2 of 3')).toBeInTheDocument()
+    expect(screen.getByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'Vehicles · 12 Products · 66 Inventory · 9 Active · 3 Inactive')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText('Page 3 of 3')).toBeInTheDocument()
+    expect(getAvailability).toHaveBeenCalledOnce()
+
+    fireEvent.change(filter, { target: { value: '' } })
+    expect(await screen.findByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'All categories · 2 Products · 13 Inventory · 1 Active · 1 Inactive')).toBeInTheDocument()
+    expect(getAvailability).toHaveBeenCalledOnce()
+    expect(getGlobalAvailability).toHaveBeenCalledTimes(2)
+  })
+
+  it('loads global unique-product availability by default and leaves Feature/Standard presentation unchanged', async () => {
+    const getGlobalAvailability = window.adminProducts.getProductAvailability as ReturnType<typeof vi.fn>
+    const getCategoryAvailability = window.adminCategories.getProductAvailability as ReturnType<typeof vi.fn>
+    getGlobalAvailability.mockResolvedValue({ totalProducts: 17, totalInventory: 143, activeProducts: 12, inactiveProducts: 5 })
+    render(<CataloguePresentation />)
+
+    expect(await screen.findByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'All categories · 17 Products · 143 Inventory · 12 Active · 5 Inactive')).toBeInTheDocument()
+    expect(getGlobalAvailability).toHaveBeenCalledOnce()
+    expect(getCategoryAvailability).not.toHaveBeenCalled()
+    expect(screen.getByText('Feature')).toBeInTheDocument()
+    expect(screen.getByText('Standard')).toBeInTheDocument()
+  })
+
+  it('renders totalProducts from availability when the same LEGO product has NEW and USED listings', async () => {
+    const getGlobalAvailability = window.adminProducts.getProductAvailability as ReturnType<typeof vi.fn>
+    getGlobalAvailability.mockResolvedValue({ totalProducts: 1, totalInventory: 4, activeProducts: 1, inactiveProducts: 0 })
+    window.adminProducts.listAdminProductListings = vi.fn().mockResolvedValue([
+      makeListing(1, false, null, 'VEHICLES', 900, 'NEW'),
+      makeListing(2, false, null, 'VEHICLES', 900, 'USED_LIKE_NEW'),
+    ])
+    render(<CataloguePresentation />)
+
+    expect(await screen.findByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'All categories · 1 Products · 4 Inventory · 1 Active · 0 Inactive')).toBeInTheDocument()
+    expect(screen.getByText('Listing #1 · Set SET-900')).toBeInTheDocument()
+    expect(screen.getByText('Listing #2 · Set SET-900')).toBeInTheDocument()
+    expect(getGlobalAvailability).toHaveBeenCalledOnce()
+  })
+
+  it('displays zero global Active and Inactive products without inventing other totals', async () => {
+    const getGlobalAvailability = window.adminProducts.getProductAvailability as ReturnType<typeof vi.fn>
+    getGlobalAvailability.mockResolvedValue({ totalProducts: 0, totalInventory: 0, activeProducts: 0, inactiveProducts: 0 })
+    render(<CataloguePresentation />)
+
+    expect(await screen.findByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'All categories · 0 Products · 0 Inventory · 0 Active · 0 Inactive')).toBeInTheDocument()
+  })
+
+  it('requests independent backend summaries as the scope changes in both directions', async () => {
+    const getGlobalAvailability = window.adminProducts.getProductAvailability as ReturnType<typeof vi.fn>
+    const getCategoryAvailability = window.adminCategories.getProductAvailability as ReturnType<typeof vi.fn>
+    getGlobalAvailability.mockResolvedValue({ totalProducts: 17, totalInventory: 143, activeProducts: 12, inactiveProducts: 5 })
+    getCategoryAvailability.mockImplementation(async (categoryId: number) => categoryId === 43
+      ? { totalProducts: 15, totalInventory: 39, activeProducts: 10, inactiveProducts: 5 }
+      : { totalProducts: 9, totalInventory: 22, activeProducts: 7, inactiveProducts: 2 })
+    render(<CataloguePresentation />)
+    const filter = screen.getByRole('combobox', { name: 'Presentation category' })
+
+    expect(await screen.findByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'All categories · 17 Products · 143 Inventory · 12 Active · 5 Inactive')).toBeInTheDocument()
+    fireEvent.change(filter, { target: { value: '43' } })
+    expect(await screen.findByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'Friends · 15 Products · 39 Inventory · 10 Active · 5 Inactive')).toBeInTheDocument()
+    fireEvent.change(filter, { target: { value: '57' } })
+    expect(await screen.findByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'BrickHeadz · 9 Products · 22 Inventory · 7 Active · 2 Inactive')).toBeInTheDocument()
+    fireEvent.change(filter, { target: { value: '' } })
+    expect(await screen.findByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'All categories · 17 Products · 143 Inventory · 12 Active · 5 Inactive')).toBeInTheDocument()
+
+    expect(getGlobalAvailability).toHaveBeenCalledTimes(2)
+    expect(getCategoryAvailability).toHaveBeenNthCalledWith(1, 43)
+    expect(getCategoryAvailability).toHaveBeenNthCalledWith(2, 57)
+  })
+
+  it('ignores stale global and category summaries after rapid scope switching', async () => {
+    const getGlobalAvailability = window.adminProducts.getProductAvailability as ReturnType<typeof vi.fn>
+    const getCategoryAvailability = window.adminCategories.getProductAvailability as ReturnType<typeof vi.fn>
+    const pendingGlobal: Array<(value: { totalProducts: number; totalInventory: number; activeProducts: number; inactiveProducts: number }) => void> = []
+    const pendingCategories: Partial<Record<number, (value: { totalProducts: number; totalInventory: number; activeProducts: number; inactiveProducts: number }) => void>> = {}
+    getGlobalAvailability.mockImplementation(() => new Promise((resolve) => { pendingGlobal.push(resolve) }))
+    getCategoryAvailability.mockImplementation((categoryId: number) => new Promise((resolve) => { pendingCategories[categoryId] = resolve }))
+    render(<CataloguePresentation />)
+    await screen.findByText('Vehicle 2')
+    const filter = screen.getByRole('combobox', { name: 'Presentation category' })
+
+    fireEvent.change(filter, { target: { value: '43' } })
+    fireEvent.change(filter, { target: { value: '57' } })
+    fireEvent.change(filter, { target: { value: '' } })
+    expect(pendingGlobal).toHaveLength(2)
+    expect(document.querySelector('.category-availability-summary')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading catalogue availability')
+
+    pendingGlobal[1]({ totalProducts: 21, totalInventory: 66, activeProducts: 14, inactiveProducts: 7 })
+    expect(await screen.findByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'All categories · 21 Products · 66 Inventory · 14 Active · 7 Inactive')).toBeInTheDocument()
+    pendingCategories[57]?.({ totalProducts: 9, totalInventory: 22, activeProducts: 7, inactiveProducts: 2 })
+    pendingCategories[43]?.({ totalProducts: 15, totalInventory: 39, activeProducts: 12, inactiveProducts: 3 })
+    pendingGlobal[0]({ totalProducts: 1, totalInventory: 999, activeProducts: 1, inactiveProducts: 0 })
+    await waitFor(() => expect(screen.getByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'All categories · 21 Products · 66 Inventory · 14 Active · 7 Inactive')).toBeInTheDocument())
+    expect(document.querySelector('.category-availability-summary')).not.toHaveTextContent('Friends')
+    expect(document.querySelector('.category-availability-summary')).not.toHaveTextContent('BrickHeadz')
+  })
+
+  it('keeps global counts fixed across listing pages and does not aggregate category summaries', async () => {
+    const getGlobalAvailability = window.adminProducts.getProductAvailability as ReturnType<typeof vi.fn>
+    const getCategoryAvailability = window.adminCategories.getProductAvailability as ReturnType<typeof vi.fn>
+    getGlobalAvailability.mockResolvedValue({ totalProducts: 31, totalInventory: 143, activeProducts: 24, inactiveProducts: 7 })
+    window.adminProducts.listAdminProductListings = vi.fn().mockResolvedValue(Array.from({ length: 9 }, (_, index) => makeListing(index + 1)))
+    render(<CataloguePresentation />)
+
+    expect(await screen.findByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'All categories · 31 Products · 143 Inventory · 24 Active · 7 Inactive')).toBeInTheDocument()
+    expect(getGlobalAvailability).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText('Page 3 of 3')).toBeInTheDocument()
+    expect(screen.getByText((_, element) => element !== null && element.classList.contains('category-availability-summary') && element.textContent === 'All categories · 31 Products · 143 Inventory · 24 Active · 7 Inactive')).toBeInTheDocument()
+    expect(getGlobalAvailability).toHaveBeenCalledOnce()
+    expect(getCategoryAvailability).not.toHaveBeenCalled()
+  })
+
+  it('keeps listings usable and displays a global availability error without showing zero counts', async () => {
+    const getGlobalAvailability = window.adminProducts.getProductAvailability as ReturnType<typeof vi.fn>
+    getGlobalAvailability.mockRejectedValue(new Error('Global availability unavailable'))
+    render(<CataloguePresentation />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load catalogue availability: Global availability unavailable')
+    expect(screen.getByText('Vehicle 1')).toBeInTheDocument()
+    expect(document.querySelector('.category-availability-summary')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Products ·/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/0 Active · 0 Inactive/)).not.toBeInTheDocument()
+  })
+
+  it('preserves listings and shows an availability error without inventing zero counts', async () => {
+    const getAvailability = window.adminCategories.getProductAvailability as ReturnType<typeof vi.fn>
+    getAvailability.mockRejectedValue(new Error('Category availability unavailable'))
+    render(<CataloguePresentation />)
+    await screen.findByText('Vehicle 1')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Presentation category' }), { target: { value: '11' } })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load category availability: Category availability unavailable')
+    expect(screen.getByText('Vehicle 1')).toBeInTheDocument()
+    expect(document.querySelector('.category-availability-summary')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Products ·/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/0 Active · 0 Inactive/)).not.toBeInTheDocument()
   })
 })

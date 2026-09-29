@@ -23,6 +23,25 @@ it('parses populated and nullable catalogue thumbnail fields without changing op
   expect(authenticatedFetch).toHaveBeenCalledWith('/admin/categories')
 })
 
+it('fetches complete category product availability from the authenticated category endpoint', async () => {
+  const availability = { totalProducts: 15, totalInventory: 66, activeProducts: 12, inactiveProducts: 3 }
+  const authenticatedFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(availability), { status: 200 }))
+  const service = new CategoryService({ authenticatedFetch } as unknown as AuthService)
+
+  await expect(service.getProductAvailability(42)).resolves.toEqual(availability)
+  expect(authenticatedFetch).toHaveBeenCalledWith('/admin/categories/42/product-availability')
+})
+
+it('accepts zero availability counts and rejects malformed category summaries', async () => {
+  const authenticatedFetch = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ totalProducts: 0, totalInventory: 0, activeProducts: 0, inactiveProducts: 0 }), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ totalProducts: 1, totalInventory: -1, activeProducts: 1, inactiveProducts: 0 }), { status: 200 }))
+  const service = new CategoryService({ authenticatedFetch } as unknown as AuthService)
+
+  await expect(service.getProductAvailability(42)).resolves.toEqual({ totalProducts: 0, totalInventory: 0, activeProducts: 0, inactiveProducts: 0 })
+  await expect(service.getProductAvailability(42)).rejects.toMatchObject({ code: 'malformed-response' })
+})
+
 it('uploads, replaces, and deletes thumbnail artwork through the Backend thumbnail-artwork endpoint', async () => {
   const uploaded = { ...category, imageUrl: 'https://cdn.example/opening.jpg', imagePublicId: 'category-artwork/8-opening', thumbnailUrl: 'https://cdn.example/thumbnail.jpg', thumbnailPublicId: 'category-thumbnail/8-thumb' }
   const deleted = { ...uploaded, thumbnailUrl: null, thumbnailPublicId: null }

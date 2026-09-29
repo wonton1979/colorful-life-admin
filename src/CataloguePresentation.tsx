@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import type { AdminCategory } from '../electron/category-contract'
-import type { AdminProductListing } from '../electron/product-contract'
+import type { AdminProductListing, ProductAvailabilitySummary } from '../electron/product-contract'
 import { adminCategories, adminProducts } from './admin-api'
 import { normalizeImageFile } from './image-normalization'
 
@@ -23,11 +23,17 @@ interface CataloguePresentationProps {
   refreshCategory?: number | null
 }
 
+type AvailabilityScope = number | 'all'
+type LoadedAvailability = ProductAvailabilitySummary & { scope: AvailabilityScope }
+type AvailabilityError = { scope: AvailabilityScope; message: string }
+
 function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: CataloguePresentationProps) {
   const [listings, setListings] = useState<AdminProductListing[]>([])
   const [categories, setCategories] = useState<AdminCategory[]>([])
   const [categoriesLoading, setCategoriesLoading] = useState(true)
   const [categoriesError, setCategoriesError] = useState('')
+  const [availability, setAvailability] = useState<LoadedAvailability | null>(null)
+  const [availabilityError, setAvailabilityError] = useState<AvailabilityError | null>(null)
   const [selectedCategory, setSelectedCategory] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [hasLoaded, setHasLoaded] = useState(false)
@@ -44,6 +50,27 @@ function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: Cat
 
   const selectedCategoryNoLongerExists = !categoriesLoading && !categoriesError && !!selectedCategory && !categories.some(category => String(category.id) === selectedCategory)
   const activeCategory = selectedCategoryNoLongerExists ? '' : selectedCategory
+  const selectedCategoryId = activeCategory ? Number(activeCategory) : null
+  const selectedCategoryName = categories.find(category => category.id === selectedCategoryId)?.name
+  const availabilityScope: AvailabilityScope = selectedCategoryId ?? 'all'
+  const availabilityLabel = selectedCategoryId === null ? 'All categories' : selectedCategoryName ?? 'Selected category'
+
+  useEffect(() => {
+    let current = true
+    const scope: AvailabilityScope = selectedCategoryId ?? 'all'
+    setAvailability(null)
+    setAvailabilityError(null)
+    const request = selectedCategoryId === null
+      ? adminProducts.getProductAvailability()
+      : adminCategories.getProductAvailability(selectedCategoryId)
+    void request.then((summary) => {
+      if (current) setAvailability({ ...summary, scope })
+    }, (requestError) => {
+      if (current) setAvailabilityError({ scope, message: getErrorMessage(requestError) })
+    })
+
+    return () => { current = false }
+  }, [selectedCategoryId])
 
   const loadListings = async ({ category = activeCategory, resetPage = false }: { category?: string; resetPage?: boolean } = {}) => {
     setIsLoading(true)
@@ -152,7 +179,16 @@ function CataloguePresentation({ refreshToken = 0, refreshCategory = null }: Cat
     <section className="product-panel catalogue-presentation" aria-labelledby="catalogue-presentation-title">
       <div className="product-panel-heading"><div><p className="eyebrow">CATALOGUE</p><h2 id="catalogue-presentation-title">Presentation management</h2></div><button className="button button-secondary" type="button" onClick={() => void loadListings()} disabled={isLoading || activeAction !== null} aria-busy={isLoading}>{isLoading ? 'Loading…' : 'Refresh listings'}</button></div>
       <p className="panel-intro">Manage shared product Feature state and catalogue artwork.</p>
-      <label className="category-filter">Filter category<select aria-label="Presentation category" value={activeCategory} onChange={(event) => { setSelectedCategory(event.target.value); setPage(1) }} disabled={categoriesLoading || !!categoriesError}><option value="">All categories</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+      <div className="presentation-category-controls">
+        <label className="category-filter">Filter category<select aria-label="Presentation category" value={activeCategory} onChange={(event) => { setSelectedCategory(event.target.value); setPage(1) }} disabled={categoriesLoading || !!categoriesError}><option value="">All categories</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+        <div className="category-availability" aria-live="polite" aria-busy={availability?.scope !== availabilityScope && availabilityError?.scope !== availabilityScope}>
+          {availability?.scope === availabilityScope
+            ? <p className="category-availability-summary"><strong>{availabilityLabel}</strong> · {availability.totalProducts} Products · {availability.totalInventory} Inventory · {availability.activeProducts} Active · {availability.inactiveProducts} Inactive</p>
+            : availabilityError?.scope === availabilityScope
+              ? <p className="error-message" role="alert">Unable to load {selectedCategoryId === null ? 'catalogue' : 'category'} availability: {availabilityError.message}</p>
+              : <p className="status-message" role="status">Loading {selectedCategoryId === null ? 'catalogue' : 'category'} availability…</p>}
+        </div>
+      </div>
       {categoriesLoading && <p className="status-message">Loading categories…</p>}
       {categoriesError && <p className="error-message" role="alert">Unable to load categories: {categoriesError}</p>}
       {error && <p className="error-message" role="alert">{error}</p>}

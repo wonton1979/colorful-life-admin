@@ -37,6 +37,7 @@ describe('ProductEditor', () => {
     storedImages = [image(9, 0), image(10, 1)]
     imageOperationOrder = []
     window.adminCategories = {
+      getProductAvailability: vi.fn().mockResolvedValue({ totalProducts: 0, totalInventory: 0, activeProducts: 0, inactiveProducts: 0 }),
       list: vi.fn().mockResolvedValue([
         { id: 11, name: 'Vehicles', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null },
         { id: 29, name: 'Juniors', subtitle: null, description: null, imageUrl: null, imagePublicId: null, thumbnailUrl: null, thumbnailPublicId: null },
@@ -46,6 +47,7 @@ describe('ProductEditor', () => {
       createProduct: vi.fn(),
       listProducts: vi.fn().mockResolvedValue([]),
       listAdminProductListings: vi.fn().mockResolvedValue([]),
+      getProductAvailability: vi.fn().mockResolvedValue({ totalProducts: 0, totalInventory: 0, activeProducts: 0, inactiveProducts: 0 }),
       updateProductMetadata: vi.fn().mockResolvedValue(details()),
       listProductImages: vi.fn().mockImplementation(async () => storedImages),
       uploadProductImage: vi.fn().mockImplementation(async () => {

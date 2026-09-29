@@ -1,3 +1,5 @@
+import type { ProductAvailabilitySummary } from './product-contract.js'
+
 export interface AdminCategory {
   id: number
   name: string
@@ -19,6 +21,7 @@ export type CategoryCreate = CategoryTextUpdate
 
 export interface AdminCategoriesApi {
   list(): Promise<AdminCategory[]>
+  getProductAvailability(categoryId: number): Promise<ProductAvailabilitySummary>
   create(input: CategoryCreate): Promise<AdminCategory>
   update(categoryId: number, update: CategoryTextUpdate): Promise<AdminCategory>
   uploadArtwork(categoryId: number, image: { bytes: Uint8Array; filename: string; mimeType: string }): Promise<AdminCategory>
